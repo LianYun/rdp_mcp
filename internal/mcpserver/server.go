@@ -128,11 +128,15 @@ func textResult(v any) *mcp.CallToolResult {
 }
 
 func shotContent(shot *session.Shot, note string) []mcp.Content {
-	meta := fmt.Sprintf("screenshot %dx%d (screen %dx%d, scale %.4f), cursor at (%d,%d)",
-		shot.Width, shot.Height, shot.ScreenWidth, shot.ScreenHeight, shot.Scale, shot.CursorX, shot.CursorY)
+	var meta string
 	if len(shot.Region) == 4 {
-		meta += fmt.Sprintf(", region x=%d y=%d w=%d h=%d (image pixel (0,0) = screenshot coordinate (%d,%d))",
-			shot.Region[0], shot.Region[1], shot.Region[2], shot.Region[3], shot.Region[0], shot.Region[1])
+		meta = fmt.Sprintf("zoomed view of region x=%d y=%d w=%d h=%d (in screenshot coordinates), image %dx%d, zoom %.2fx. "+
+			"To click something in this image at pixel (px,py), use x=%d+px/%.2f, y=%d+py/%.2f. The coordinate system is unchanged.",
+			shot.Region[0], shot.Region[1], shot.Region[2], shot.Region[3], shot.Width, shot.Height, shot.Zoom,
+			shot.Region[0], shot.Zoom, shot.Region[1], shot.Zoom)
+	} else {
+		meta = fmt.Sprintf("screenshot %dx%d (screen %dx%d, scale %.4f), cursor at (%d,%d)",
+			shot.Width, shot.Height, shot.ScreenWidth, shot.ScreenHeight, shot.Scale, shot.CursorX, shot.CursorY)
 	}
 	if note != "" {
 		meta = note + "\n" + meta
@@ -208,8 +212,8 @@ type Region struct {
 
 type screenshotIn struct {
 	Machine  string  `json:"machine" jsonschema:"machine name from list_machines"`
-	Region   *Region `json:"region,omitempty" jsonschema:"optional crop region in screenshot coordinates (zoom in on details)"`
-	MaxWidth int     `json:"max_width,omitempty" jsonschema:"long side of the returned image in pixels (default 1280); changes the coordinate scale for following actions"`
+	Region   *Region `json:"region,omitempty" jsonschema:"zoom into this region (in coordinates of the last full screenshot) at up to native resolution; does not change the coordinate system"`
+	MaxWidth int     `json:"max_width,omitempty" jsonschema:"long side of the returned image in pixels (default 1280). For full screenshots this sets the coordinate scale for following actions"`
 	Format   string  `json:"format,omitempty" jsonschema:"png (default) or jpeg"`
 }
 

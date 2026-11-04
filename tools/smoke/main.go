@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -33,6 +34,8 @@ func main() {
 	out := flag.String("out", "smoke.png", "where to save the screenshot")
 	run := flag.String("run", "", "optional command for run_command (e.g. hostname)")
 	input := flag.Bool("input", false, "also send a mouse move and a harmless key (shift)")
+	callTool := flag.String("call", "", "call a single tool and exit, e.g. -call mouse -args '{\"machine\":\"win1\",\"action\":\"move\",\"x\":10,\"y\":10}'")
+	callArgs := flag.String("args", "{}", "JSON arguments for -call")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -74,6 +77,25 @@ func main() {
 			}
 		}
 		return res
+	}
+
+	if *callTool != "" {
+		var args map[string]any
+		if err := json.Unmarshal([]byte(*callArgs), &args); err != nil {
+			log.Fatalf("-args: %v", err)
+		}
+		res := call(*callTool, args)
+		for _, c := range res.Content {
+			if img, ok := c.(*mcp.ImageContent); ok {
+				if err := os.WriteFile(*out, img.Data, 0o644); err == nil {
+					fmt.Println("saved", *out)
+				}
+			}
+		}
+		if res.IsError {
+			os.Exit(1)
+		}
+		return
 	}
 
 	call("list_machines", nil)

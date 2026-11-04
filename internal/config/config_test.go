@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -91,4 +93,21 @@ func TestEmpty(t *testing.T) {
 	if err != nil || len(c.Machines) != 0 {
 		t.Fatal(err)
 	}
+}
+
+func TestDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("# c\nRDPMCP_T1=abc\nexport RDPMCP_T2=\"x y\"\nRDPMCP_T3=keep\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RDPMCP_T3", "env-wins")
+	loaded, warns := LoadDotEnv(filepath.Join(dir, "configs.yaml"), dir)
+	if len(loaded) != 1 || len(warns) != 0 {
+		t.Fatal(loaded, warns)
+	}
+	if os.Getenv("RDPMCP_T1") != "abc" || os.Getenv("RDPMCP_T2") != "x y" || os.Getenv("RDPMCP_T3") != "env-wins" {
+		t.Fatal(os.Getenv("RDPMCP_T1"), os.Getenv("RDPMCP_T2"), os.Getenv("RDPMCP_T3"))
+	}
+	os.Unsetenv("RDPMCP_T1")
+	os.Unsetenv("RDPMCP_T2")
 }

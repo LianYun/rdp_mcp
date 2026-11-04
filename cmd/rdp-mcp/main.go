@@ -84,11 +84,25 @@ func main() {
 	}
 }
 
+// dotenvWarnings collects .env messages so serve can log them once logging is set up.
+var dotenvWarnings []string
+
 func loadConfig(path string) (*config.Config, error) {
 	p := config.Find(path)
 	cfg, err := config.Load(p)
 	if err != nil {
 		return nil, err
+	}
+	// Load .env (next to the config and in data_dir), then re-parse so ${VAR} in server fields resolve.
+	loaded, warnings := config.LoadDotEnv(p, cfg.Server.EffectiveDataDir())
+	dotenvWarnings = warnings
+	for _, f := range loaded {
+		dotenvWarnings = append(dotenvWarnings, "loaded environment from "+f)
+	}
+	if len(loaded) > 0 {
+		if cfg, err = config.Load(p); err != nil {
+			return nil, err
+		}
 	}
 	return cfg, nil
 }
@@ -147,6 +161,9 @@ func cmdServe(args []string) error {
 	slog.SetDefault(log)
 	for _, w := range warnings {
 		log.Warn("config: " + w)
+	}
+	for _, w := range dotenvWarnings {
+		log.Info(".env: " + w)
 	}
 
 	rt, err := runtime.Acquire(dataDir)
@@ -417,6 +434,9 @@ func cmdCheckConfig(args []string) error {
 		return fmt.Errorf("config file %s not found", cfg.Path)
 	}
 	fmt.Println("config:", cfg.Path)
+	for _, w := range dotenvWarnings {
+		fmt.Println(".env:", w)
+	}
 	warnings, err := cfg.Validate()
 	for _, w := range warnings {
 		fmt.Println("warning:", w)

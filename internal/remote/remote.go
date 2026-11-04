@@ -72,7 +72,7 @@ func readCapped(path string) string {
 	if len(b) > maxOutput {
 		s += "\n...[output truncated]"
 	}
-	return strings.TrimRight(s, "\r\n")
+	return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 }
 
 // RunCommand runs command on the remote machine and returns its output.
@@ -130,7 +130,10 @@ func RunCommand(o *session.Ops, command, shell string, timeout time.Duration) (*
 		"try {\r\n" +
 		"  $p = Start-Process -FilePath " + exe + " -ArgumentList " + args +
 		" -RedirectStandardOutput \"$base.out\" -RedirectStandardError \"$base.err\" -NoNewWindow -PassThru\r\n" +
-		"  if (-not $p.WaitForExit(" + strconv.Itoa(timeoutMs) + ")) { try { $p.Kill() } catch {}; $code = 'timeout' } else { $code = $p.ExitCode }\r\n" +
+		// Touch Handle while the process is alive, otherwise ExitCode is $null after WaitForExit.
+		"  $null = $p.Handle\r\n" +
+		"  if (-not $p.WaitForExit(" + strconv.Itoa(timeoutMs) + ")) { try { $p.Kill() } catch {}; $code = 'timeout' } else { $p.WaitForExit(); $code = $p.ExitCode }\r\n" +
+		"  if ($null -eq $code) { $code = 'unknown' }\r\n" +
 		"} catch { $_ | Out-String | Set-Content -LiteralPath \"$base.err\" -Encoding UTF8; $code = 1 }\r\n" +
 		"Set-Content -LiteralPath \"$base.code\" -Value $code -Encoding ASCII\r\n"
 	if err := os.WriteFile(local(".ps1"), utf8BOM(runner), 0o600); err != nil {
@@ -165,9 +168,12 @@ func RunCommand(o *session.Ops, command, shell string, timeout time.Duration) (*
 		if b, err := os.ReadFile(local(".code")); err == nil && len(bytes.TrimSpace(b)) > 0 {
 			code := strings.TrimSpace(decodeOutput(b))
 			res := &Result{Stdout: readCapped(local(".out")), Stderr: readCapped(local(".err"))}
-			if code == "timeout" {
+			switch code {
+			case "timeout":
 				res.TimedOut, res.ExitCode = true, -1
-			} else {
+			case "unknown":
+				res.ExitCode = -1
+			default:
 				res.ExitCode, _ = strconv.Atoi(code)
 			}
 			return res, nil

@@ -30,11 +30,15 @@ machines:
 | 写法 | 示例 | 说明 |
 |---|---|---|
 | 系统钥匙串（推荐） | `password: keychain:win1` | 先执行 `rdp-mcp secret set win1` 输入密码；macOS 用 Keychain，Linux 用 Secret Service |
-| 环境变量 | `password: ${WIN1_PASSWORD}` | 启动服务前 `export WIN1_PASSWORD=...` |
+| 环境变量 | `password: ${WIN1_PASSWORD}` | 在环境中 `export`，或写入 `.env` 文件（见下） |
 | 命令 | `password_cmd: "pass show rdp/win1"` | 执行命令，取标准输出作为密码 |
 | 明文（不推荐） | `password: P@ssw0rd` | `check-config` 会警告 |
 
 无图形会话的 Linux 服务器通常没有 Secret Service，请用环境变量或 `password_cmd`。
+
+### .env 文件
+
+服务启动时依次读取配置文件同目录的 `.env` 和 `data_dir` 下的 `.env`（通常都是 `~/.rdp_mcp/.env`），格式 `KEY=VALUE`（支持 `#` 注释、`export ` 前缀和引号）。进程环境里已有的同名变量优先。修改 `.env` 后需重启服务。文件权限过宽时会警告，建议 `chmod 600 ~/.rdp_mcp/.env`。
 
 ## 字段
 

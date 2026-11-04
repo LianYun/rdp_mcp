@@ -237,8 +237,18 @@ static BOOL w_present_gateway_message(freerdp* instance, UINT32 type, BOOL isDis
 	return TRUE;
 }
 
+static BOOL w_save_session_info(rdpContext* context, UINT32 type, const void* data)
+{
+	wContext* wc = (wContext*)context;
+	wc->logon_count++;
+	wc->logon_ms = now_ms();
+	WLog_INFO(TAG, "logon notification type %" PRIu32, type);
+	return TRUE;
+}
+
 static BOOL w_client_new(freerdp* instance, rdpContext* context)
 {
+	context->update->SaveSessionInfo = w_save_session_info;
 	instance->PreConnect = w_pre_connect;
 	instance->PostConnect = w_post_connect;
 	instance->PostDisconnect = w_post_disconnect;
@@ -447,6 +457,9 @@ static BOOL handle_status(wContext* wc, INT64 id)
 	(void)WINPR_JSON_AddIntegerToObject(r, "height", (wc->connected && gdi) ? gdi->height : 0);
 	(void)WINPR_JSON_AddIntegerToObject(r, "dirty_seq", seq);
 	(void)WINPR_JSON_AddIntegerToObject(r, "idle_ms", last ? (INT64)(now_ms() - last) : -1);
+	(void)WINPR_JSON_AddIntegerToObject(r, "logon_count", wc->logon_count);
+	(void)WINPR_JSON_AddIntegerToObject(r, "logon_ms_ago",
+	                                    wc->logon_ms ? (INT64)(now_ms() - wc->logon_ms) : -1);
 	return ipc_send_json(wc, r);
 }
 

@@ -165,7 +165,9 @@ func (s *Session) connect(ctx context.Context) error {
 	dataDir := s.m.opts.DataDir
 	logDir := filepath.Join(dataDir, "logs")
 	_ = os.MkdirAll(logDir, 0o700)
-	env := []string{"WLOG_LEVEL=WARN"}
+	// FreeRDP's own certificate store is never used (the service pins certificates in known_hosts),
+	// so its "host key changed" warnings are noise outside debug mode.
+	env := []string{"WLOG_LEVEL=WARN", "WLOG_FILTER=com.freerdp.crypto:FATAL"}
 	if s.m.opts.WorkerDebug {
 		env = []string{"WLOG_LEVEL=DEBUG"}
 	}
@@ -238,6 +240,8 @@ func (s *Session) connect(ctx context.Context) error {
 	if viewers > 0 {
 		_, _ = w.Call(ctx, "subscribe", map[string]any{"on": true})
 	}
+	waited, logon := waitFirstFrame(ctx, w)
+	log.Debug("desktop ready", "waited", waited, "logon_notified", logon)
 	s.setState(StateConnected, "")
 	log.Info("connected", "width", size.Width, "height", size.Height, "freerdp", w.Hello.FreeRDP)
 	return nil
@@ -584,4 +588,42 @@ func (s *Session) CursorPos() [2]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return [2]int{s.cursor.x, s.cursor.y}
+}
+
+// waitFirstFrame waits until the server finished logon and the desktop settled, so the first
+// screenshot after connecting is neither blank nor the transient lock screen shown while Windows
+// re-attaches an existing session. Returns how long it waited and whether logon was seen.
+func waitFirstFrame(ctx context.Context, w *worker.Client) (time.Duration, bool) {
+	start := time.Now()
+	deadline := start.Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		r, err := w.Call(cctx, "status", nil)
+		cancel()
+		if err != nil {
+			return time.Since(start), false
+		}
+		var st struct {
+			DirtySeq   int `json:"dirty_seq"`
+			IdleMs     int `json:"idle_ms"`
+			LogonCount int `json:"logon_count"`
+			LogonAgo   int `json:"logon_ms_ago"`
+		}
+		_ = r.Decode(&st)
+		logon := st.LogonCount > 0
+		// After logon, require the screen to be quiet for a moment; without a logon
+		// notification (some servers never send one) fall back to a longer quiet period.
+		if logon && st.LogonAgo >= 500 && st.DirtySeq > 0 && st.IdleMs >= 500 {
+			return time.Since(start), true
+		}
+		if !logon && time.Since(start) > 5*time.Second && st.DirtySeq > 0 && st.IdleMs >= 1000 {
+			return time.Since(start), false
+		}
+		select {
+		case <-ctx.Done():
+			return time.Since(start), false
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return time.Since(start), false
 }

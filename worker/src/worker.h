@@ -48,6 +48,10 @@ typedef struct
 	UINT64 last_dirty_event_ms;
 	UINT32 known_width, known_height;
 
+	/* logon notifications (Save Session Info PDU); main thread */
+	UINT32 logon_count;
+	UINT64 logon_ms;
+
 	/* pointer */
 	wCursor cursor;
 	UINT64 last_cursor_event_ms;

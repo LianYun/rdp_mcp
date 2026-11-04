@@ -101,6 +101,7 @@ type Shot struct {
 	ScreenHeight int         `json:"screen_height"`
 	Scale        float64     `json:"scale"`
 	Region       []int       `json:"region,omitempty"`
+	Zoom         float64     `json:"zoom,omitempty"` // image pixels per screenshot coordinate (region only)
 	CursorX      int         `json:"cursor_x"`
 	CursorY      int         `json:"cursor_y"`
 	DirtySeq     int         `json:"-"`
@@ -147,31 +148,51 @@ func (o *Ops) Screenshot(opt ShotOptions) (*Shot, error) {
 		maxW = srv.EffectiveMaxWidth()
 	}
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+
+	if opt.Region != nil {
+		// Zoom: region is in the agent's current coordinate system; the coordinate system is not changed.
+		sc := o.scale()
+		rr := *opt.Region
+		real := image.Rect(
+			int(math.Floor(float64(rr.Min.X)/sc)), int(math.Floor(float64(rr.Min.Y)/sc)),
+			int(math.Ceil(float64(rr.Max.X)/sc)), int(math.Ceil(float64(rr.Max.Y)/sc)))
+		real = real.Intersect(img.Bounds())
+		if real.Empty() {
+			return nil, fmt.Errorf("region is outside the screen (screenshot coordinates are %dx%d)",
+				int(math.Round(float64(w)*sc)), int(math.Round(float64(h)*sc)))
+		}
+		crop := imaging.Crop(img, real)
+		zoom := imaging.Scale(real.Dx(), real.Dy(), maxW) // never upscale beyond native pixels
+		out := imaging.Resize(crop, zoom)
+		data, mime, err := imaging.Encode(out, opt.Format, 85, 3<<20)
+		if err != nil {
+			return nil, err
+		}
+		x0, y0 := o.ToShot(real.Min.X, real.Min.Y)
+		return &Shot{
+			Data: data, MIME: mime, Image: out,
+			Width: out.Bounds().Dx(), Height: out.Bounds().Dy(), ScreenWidth: w, ScreenHeight: h,
+			Scale: sc, Region: []int{x0, y0, rr.Dx(), rr.Dy()}, Zoom: zoom / sc,
+			CursorX: int(math.Round(float64(cur.X) * sc)), CursorY: int(math.Round(float64(cur.Y) * sc)),
+		}, nil
+	}
+
 	sc := imaging.Scale(w, h, maxW)
 	if !opt.KeepScale {
 		o.s.mu.Lock()
 		o.s.lastScale = sc
 		o.s.mu.Unlock()
 	}
-	var src image.Image = img
-	shot := &Shot{ScreenWidth: w, ScreenHeight: h, Scale: sc}
-	if opt.Region != nil {
-		rr := *opt.Region
-		real := image.Rect(
-			int(math.Floor(float64(rr.Min.X)/sc)), int(math.Floor(float64(rr.Min.Y)/sc)),
-			int(math.Ceil(float64(rr.Max.X)/sc)), int(math.Ceil(float64(rr.Max.Y)/sc)))
-		src = imaging.Crop(img, real)
-		shot.Region = []int{rr.Min.X, rr.Min.Y, rr.Dx(), rr.Dy()}
-	}
-	out := imaging.Resize(src, sc)
+	out := imaging.Resize(img, sc)
 	data, mime, err := imaging.Encode(out, opt.Format, 85, 3<<20)
 	if err != nil {
 		return nil, err
 	}
-	shot.Data, shot.MIME, shot.Image = data, mime, out
-	shot.Width, shot.Height = out.Bounds().Dx(), out.Bounds().Dy()
-	shot.CursorX, shot.CursorY = int(math.Round(float64(cur.X)*sc)), int(math.Round(float64(cur.Y)*sc))
-	return shot, nil
+	return &Shot{
+		Data: data, MIME: mime, Image: out,
+		Width: out.Bounds().Dx(), Height: out.Bounds().Dy(), ScreenWidth: w, ScreenHeight: h, Scale: sc,
+		CursorX: int(math.Round(float64(cur.X) * sc)), CursorY: int(math.Round(float64(cur.Y) * sc)),
+	}, nil
 }
 
 // ---- status / waiting ----
