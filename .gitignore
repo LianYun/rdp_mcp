@@ -17,3 +17,9 @@ coverage.*
 .idea/
 .vscode/
 *.swp
+
+# Tauri / 前端
+node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/binaries/

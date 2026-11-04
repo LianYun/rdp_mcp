@@ -1,8 +1,11 @@
 # 复制到 ./.rdp_mcp/configs.yaml 或 ~/.rdp_mcp/configs.yaml
 server:
-  listen: 127.0.0.1:8765        # MCP 端点 http://127.0.0.1:8765/mcp
-  auth_token: ${RDP_MCP_TOKEN}  # 可选；监听非本地地址时必填
+  listen: 127.0.0.1:8765        # MCP: /mcp   管理 API: /api/v1
+  mcp_token: ${RDP_MCP_TOKEN}   # 可选；监听非本地地址时必填
   screenshot_max_width: 1280
+  audit:
+    enabled: true
+    retention_days: 7
 
 defaults:
   port: 3389
@@ -18,9 +21,15 @@ machines:
     description: "开发机，装了 VS 和 Chrome"
     host: 192.168.1.20
     username: alice
-    password: ${DEV_PC_PASSWORD}
+    password: keychain:dev-pc        # rdp-mcp secret set dev-pc
     domain: CORP
     tags: [dev]
+
+  - name: test-vm
+    description: "测试虚拟机"
+    host: 192.168.1.30
+    username: tester
+    password: ${TEST_VM_PASSWORD}
 
   - name: build-server
     description: "构建服务器"

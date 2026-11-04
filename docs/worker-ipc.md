@@ -33,6 +33,8 @@
 | `clipboard_set` | `text` | — |
 | `resize` | `width, height` | — |
 | `cert_reply` | `accept: 0 拒绝 / 1 永久 / 2 本次` | — |
+| `subscribe` | `on: bool` | 开启/关闭 `frame_dirty` 事件推送（UI 实时画面需要） |
+| `cursor_get` | — | `{x, y, visible, hot_x, hot_y}`，若形状有变化再回一个 `F` 帧（指针位图） |
 
 ### 事件
 
@@ -42,8 +44,10 @@
 | `disconnected` | `reason` | 主服务决定是否重连 |
 | `cert_verify` | `host, port, subject, issuer, fingerprint, changed` | worker 阻塞等待 `cert_reply` |
 | `resized` | `width, height` | 服务器侧分辨率变化 |
+| `frame_dirty` | `dirty_seq, rects` | 仅在 `subscribe` 开启时发送，合并节流（≤30 次/秒） |
+| `cursor` | `x, y, visible, shape_seq` | 指针位置/形状变化（节流） |
 | `log` | `level, msg` | 转发 worker 日志 |
 
 ## 线程模型
 
-worker 单线程：RDP 事件句柄与 IPC socket 一起等待，所有 FreeRDP 调用都在同一线程执行。
+worker 单线程：RDP 事件句柄与 IPC socket 一起等待，所有 FreeRDP 调用都在同一线程执行。IPC 连接断开时 worker 立即断开 RDP 并退出。

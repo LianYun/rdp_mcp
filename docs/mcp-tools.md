@@ -7,12 +7,15 @@
 
 - 动作类工具（`mouse`、`keyboard`）默认在动作完成、屏幕稳定（最多等待约 300ms）后附带截图；传 `screenshot_after: false` 可关闭。
 - 机器未连接时，工具调用会按需自动连接。
+- 认证：配置了 `mcp_token` 时需 `Authorization: Bearer <mcp_token>`。
+- 控制模式：机器处于 `human`（人工接管）或 `paused` 时，除 `list_machines`、`screenshot`、`session status` 外的工具返回错误"机器正在被人工接管/已暂停"。`enabled: false` 的机器不出现在列表中。
+- 截图默认合成鼠标指针（`server.draw_cursor`）。
 - 错误以 MCP 工具错误返回（`isError: true`），文本说明原因与建议（如"会话已锁定，请先截图确认"）。
 
 ## 工具列表
 
 ### list_machines
-无参数。返回每台机器：`name`、`description`、`tags`、`state`（idle/connecting/connected/reconnecting/failed）、`resolution`。
+无参数。返回每台机器：`name`、`description`、`tags`、`state`（idle/connecting/connected/reconnecting/failed）、`control_mode`（agent/human/paused）、`resolution`。
 
 ### screenshot
 | 参数 | 类型 | 必填 | 说明 |
