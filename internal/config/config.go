@@ -48,7 +48,20 @@ func (d Duration) MarshalYAML() (any, error) {
 	if d.Duration == 0 {
 		return "0", nil
 	}
-	return d.String(), nil
+	h := d.Duration / time.Hour
+	m := (d.Duration % time.Hour) / time.Minute
+	s := (d.Duration % time.Minute) / time.Second
+	out := ""
+	if h > 0 {
+		out += fmt.Sprintf("%dh", h)
+	}
+	if m > 0 {
+		out += fmt.Sprintf("%dm", m)
+	}
+	if s > 0 || out == "" {
+		out += fmt.Sprintf("%ds", s)
+	}
+	return out, nil
 }
 
 type Audit struct {
