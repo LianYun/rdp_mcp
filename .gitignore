@@ -23,3 +23,12 @@ node_modules/
 app/dist/
 app/src-tauri/target/
 app/src-tauri/binaries/
+
+# 桌面 UI
+app/node_modules/
+app/src-tauri/gen/
+app/src-tauri/frameworks/
+app/src-tauri/tauri.macos.conf.json
+app/playwright-report/
+app/test-results/
+*.dylib
