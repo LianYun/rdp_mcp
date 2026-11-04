@@ -198,3 +198,60 @@ func TestIdleHold(t *testing.T) {
 		t.Fatalf("not reaped after release: %s", s.State())
 	}
 }
+
+func countConnects(t *testing.T, logPath string) int {
+	n := 0
+	for _, in := range inputs(t, logPath) {
+		if in["op"] == "connect" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestTakeoverDoesNotReconnect(t *testing.T) {
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	if err := s.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Peek(context.Background(), func(o *Ops) error { _, _ = o.call("takeover", nil); return nil })
+	time.Sleep(4 * time.Second)
+	if st := s.State(); st != StateFailed || !strings.Contains(s.Info().LastError, "taken over") {
+		t.Fatalf("state=%s err=%q", st, s.Info().LastError)
+	}
+	if n := countConnects(t, logPath); n != 1 {
+		t.Fatalf("reconnected after takeover: %d connects", n)
+	}
+	// an explicit call takes the session back
+	if err := s.Connect(context.Background()); err != nil || s.State() != StateConnected {
+		t.Fatalf("explicit reconnect: %v %s", err, s.State())
+	}
+}
+
+func TestQuickRetryOnlyOnce(t *testing.T) {
+	t.Setenv("FAKE_WORKER_DROP", "transport")
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	err := s.Connect(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "dropped right after connecting") {
+		t.Fatalf("want drop error, got %v", err)
+	}
+	if n := countConnects(t, logPath); n != 2 {
+		t.Fatalf("want exactly one quick retry (2 connects), got %d", n)
+	}
+}
+
+func TestTakeoverRightAfterConnectNoRetry(t *testing.T) {
+	t.Setenv("FAKE_WORKER_DROP", "takeover")
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	err := s.Connect(context.Background())
+	var tko *TakenOverError
+	if !errors.As(err, &tko) {
+		t.Fatalf("want TakenOverError, got %v", err)
+	}
+	if n := countConnects(t, logPath); n != 1 {
+		t.Fatalf("retried after takeover: %d connects", n)
+	}
+}

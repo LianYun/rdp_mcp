@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 const envFlag = "FAKE_WORKER"
@@ -143,7 +144,19 @@ func (st *state) handle(req map[string]any) bool {
 			st.w, st.h = w, num(req["height"])
 		}
 		st.dirty = 1
+		st.record(map[string]any{"op": "connect"})
 		st.reply(id, map[string]any{"width": st.w, "height": st.h})
+		if os.Getenv("FAKE_WORKER_DROP") != "" { // server drops the session right after logon
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				if os.Getenv("FAKE_WORKER_DROP") == "takeover" {
+					st.send(map[string]any{"event": "disconnected", "code": 0x00010001, "reason": "taken over by another session"})
+				} else {
+					st.send(map[string]any{"event": "disconnected", "code": 0x0002000D, "reason": "transport failed"})
+				}
+				os.Exit(0)
+			}()
+		}
 	case "disconnect":
 		st.reply(id, nil)
 		return false
@@ -208,6 +221,9 @@ func (st *state) handle(req map[string]any) bool {
 		st.send(map[string]any{"event": "resized", "width": st.w, "height": st.h})
 	case "crash":
 		os.Exit(3)
+	case "takeover":
+		st.send(map[string]any{"event": "disconnected", "code": 0x00010005, "reason": "disconnected by another connection"})
+		os.Exit(0)
 	default:
 		st.fail(id, "unknown op "+op)
 	}

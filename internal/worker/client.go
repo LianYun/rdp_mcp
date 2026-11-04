@@ -67,9 +67,12 @@ type Client struct {
 
 	events chan Event
 	done   chan struct{}
-	once   sync.Once
-	err    error
-	Hello  struct {
+	// last "disconnected" event, recorded synchronously in the read loop
+	discCode   uint32
+	discReason string
+	once       sync.Once
+	err        error
+	Hello      struct {
 		Version  string `json:"version"`
 		FreeRDP  string `json:"freerdp"`
 		Protocol int    `json:"protocol"`
@@ -294,6 +297,16 @@ func (c *Client) handleJSON(b []byte) {
 		c.log.Warn("ipc: bad json from worker", "err", err)
 		return
 	}
+	if head.Event == "disconnected" {
+		var d struct {
+			Code   uint32 `json:"code"`
+			Reason string `json:"reason"`
+		}
+		_ = json.Unmarshal(b, &d)
+		c.mu.Lock()
+		c.discCode, c.discReason = d.Code, d.Reason
+		c.mu.Unlock()
+	}
 	if head.Event != "" {
 		select {
 		case c.events <- Event{Name: head.Event, Raw: b}:
@@ -373,4 +386,12 @@ func (c *Client) Call(ctx context.Context, op string, params map[string]any) (Re
 		c.mu.Unlock()
 		return Reply{}, ctx.Err()
 	}
+}
+
+// Disconnect returns the FreeRDP error code and reason of the last "disconnected" event.
+// It is complete once Done() is closed.
+func (c *Client) Disconnect() (uint32, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.discCode, c.discReason
 }

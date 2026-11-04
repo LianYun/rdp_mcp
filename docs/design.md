@@ -322,5 +322,6 @@ remoter/
 | 2026-11-04 | v0.5 | 桌面 UI（U1–U4）首版：Tauri 2 + React；Rust 侧只做服务发现/启停（sidecar 用标准库 `Command` + `setsid` 启动，因此不使用 `shell` 插件）、托盘、单实例、开机自启、关闭到托盘；前端也可在浏览器里运行（Playwright 端到端测试用）；`REMOTER_MCP_DATA_DIR` 覆盖数据目录用于测试/多实例。macOS 打包：`scripts/bundle-macos-libs.py` 把 FreeRDP 及其依赖放进 `Contents/Frameworks` 并改写 install name，产出未签名 .dmg |
 | 2026-11-04 | v0.4 | 管理 API 全部实现（M6）；`run_command` 先确认运行对话框出现再输入、`conhost --headless` 无窗口启动并带回退（M8）；`run_command detach` + `job` 工具（D19）；服务端 OCR（D16，`screenshot ocr`）；`file search` / `append`；fakeworker 自动化测试；CI 工作流与 Dockerfile。决定不做：`system` / `inspect` 工具、`session lock`、`service install` |
 | 2026-11-04 | v0.4.1 | 全面更名为 remoter（D20）：`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名；从 `~/.rdp_mcp` 自动迁移配置；旧钥匙串条目可读 |
+| 2026-11-04 | v0.4.2 | 部署到 172.23.4.162 时发现两处服务抢同一台 Windows 会互相踢、且快速重试无次数限制：快速重试只做一次；服务器以“被其他连接接管/注销/管理员断开”（ERRINFO 0x1/0x2/0x5/0xB/0xC）结束会话时不再自动重连，状态置为 failed 并说明原因，下次工具调用再连回 |
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `remoter-mcp trust` 命令 |

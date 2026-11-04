@@ -160,7 +160,37 @@ func (s *Session) shareDir() string { return filepath.Join(s.m.opts.DataDir, "sh
 func (s *Session) ShareDir() string { return s.shareDir() }
 
 // connect starts a worker and connects. Caller holds s.op.
-func (s *Session) connect(ctx context.Context) error {
+func (s *Session) connect(ctx context.Context) error { return s.connectAttempt(ctx, true) }
+
+// TakenOver reports whether a FreeRDP error code means the Windows session was ended
+// or taken over on the server side (another RDP connection, logoff, admin disconnect).
+// Reconnecting automatically would just kick the other side off again.
+func TakenOver(code uint32) bool {
+	const errinfo = 0x00010000 // FREERDP_ERROR_ERRINFO_CLASS << 16
+	switch code {
+	case errinfo | 0x01, // ERRINFO_RPC_INITIATED_DISCONNECT
+		errinfo | 0x02, // ERRINFO_RPC_INITIATED_LOGOFF
+		errinfo | 0x05, // ERRINFO_DISCONNECTED_BY_OTHERCONNECTION
+		errinfo | 0x0B, // ERRINFO_RPC_INITIATED_DISCONNECT_BYUSER
+		errinfo | 0x0C: // ERRINFO_LOGOFF_BY_USER
+		return true
+	}
+	return false
+}
+
+// TakenOverError is returned when the server ended the session because another
+// client took it over; callers must not retry automatically.
+type TakenOverError struct{ Reason string }
+
+func (e *TakenOverError) Error() string { return takenOverMsg(e.Reason) }
+
+func takenOverMsg(reason string) string {
+	return "the Windows session was taken over or ended on the server (" + reason +
+		"); another RDP client is probably using this machine. Not reconnecting automatically; " +
+		"the next tool call will reconnect and take the session back"
+}
+
+func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) error {
 	s.mu.Lock()
 	r := s.cfg
 	s.manual = false
@@ -262,10 +292,16 @@ func (s *Session) connect(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if s.quickRetryOnce(ctx, log, w.Err()) {
-			return s.connect(ctx)
+		if code, reason := w.Disconnect(); TakenOver(code) {
+			s.setState(StateFailed, takenOverMsg(reason))
+			return &TakenOverError{Reason: reason}
 		}
-		return errors.New("connection dropped right after connecting: " + errString(w.Err()))
+		if allowQuickRetry && s.quickRetryOnce(ctx, log, w.Err()) {
+			return s.connectAttempt(ctx, false)
+		}
+		msg := "connection dropped right after connecting: " + errString(w.Err())
+		s.setState(StateFailed, msg)
+		return errors.New(msg)
 	case <-time.After(1500 * time.Millisecond):
 	case <-ctx.Done():
 		return ctx.Err()
@@ -330,7 +366,10 @@ func (s *Session) eventLoop(w *worker.Client, gen int) {
 			}
 			if wasConnected && !manual {
 				log.Warn("session lost", "err", w.Err())
-				if attempts > 0 {
+				if code, reason := w.Disconnect(); TakenOver(code) {
+					log.Warn("session taken over on the server; not reconnecting", "reason", reason)
+					s.setState(StateFailed, takenOverMsg(reason))
+				} else if attempts > 0 {
 					s.mu.Lock()
 					quick := time.Since(s.connectedAt) < 5*time.Second
 					s.mu.Unlock()
@@ -442,6 +481,12 @@ func (s *Session) reconnectLoop(gen, attempts int, quick bool) {
 		}
 		ctx, cancel := context.WithTimeout(s.m.ctx, 90*time.Second)
 		err := s.connect(ctx)
+		var tko *TakenOverError
+		if errors.As(err, &tko) {
+			cancel()
+			s.op.Unlock()
+			return
+		}
 		cancel()
 		if err == nil {
 			s.op.Unlock()
