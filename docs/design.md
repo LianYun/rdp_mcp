@@ -1,8 +1,10 @@
-# rdp_mcp 技术方案
+# Remoter 技术方案
 
-> 状态：v0.2（2026-11-04）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
+> 状态：v0.4（2026-11-04）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
 >
-> 子文档：[MCP 工具规范](mcp-tools.md) · [管理 API](admin-api.md) · [桌面 UI](ui.md) · [配置说明](configuration.md) · [Worker IPC 协议](worker-ipc.md) · [构建与发布](packaging.md) · [路线图](roadmap.md)
+> 命名：产品与桌面应用名为 **Remoter**（D20）；服务 / CLI / 二进制 / 数据目录等技术名称保持 `rdp-mcp`、`rdp-worker`、`~/.rdp_mcp`。
+>
+> 子文档：[MCP 工具规范](mcp-tools.md) · [管理 API](admin-api.md) · [桌面应用](ui.md) · [配置说明](configuration.md) · [Worker IPC 协议](worker-ipc.md) · [构建与发布](packaging.md) · [路线图](roadmap.md)
 
 ---
 
@@ -65,12 +67,13 @@
 | D17 | 不在 Windows 端常驻代理 | 零常驻、无杀软隔离风险、无需引导时间 | win-rdp-mcp 式常驻 exe（见 comparison-win-rdp-mcp.md） |
 | D18 | 系统 / 窗口 / UIA 能力用预设临时 PowerShell 脚本实现，经 `run_command` 通道执行 | 复用现有零常驻通道；输出由脚本结构化并限制条数，避免撑爆上下文 | 每类一个专用工具（工具数膨胀） |
 | D19 | 长任务通过 `run_command detach` + `job` 工具异步执行 | 复用 jobs 目录的 .out/.err/.code 文件，无需新机制；模型可边跑安装边操作界面 | 同步阻塞直到超时 |
+| D20 | 产品名 **Remoter**，只改对外名称（桌面应用名、bundle id `com.lianyun.remoter`、文档标题、MCP 服务显示名）；技术名称不变 | 不破坏现有配置、钥匙串条目、命令行脚本与 MCP 客户端注册 | 全面改名（需迁移数据目录与钥匙串） |
 
 ## 4. 总体架构
 
 ```
  ┌──────────────────────────┐        ┌──────────────────────────────┐
- │  MCP 客户端（模型）         │        │  rdp_mcp Desktop（Tauri）      │
+ │  MCP 客户端（模型）         │        │  Remoter 桌面应用（Tauri）     │
  │  Claude Code / Desktop … │        │  React UI ── HTTP/SSE/WS ──┐   │
  └────────────┬─────────────┘        │  Rust：进程管理/托盘/自启动   │   │
               │ /mcp  (Bearer mcp_token)  └──────────┬─────────────┘   │
@@ -101,7 +104,7 @@
 |---|---|---|
 | `rdp-mcp` | Go | 服务 + CLI |
 | `rdp-worker` | C | 单机器 RDP 会话进程，由服务拉起 |
-| `rdp_mcp Desktop` | Tauri（Rust + React） | 桌面管理 UI，内置前两者作为 sidecar |
+| Remoter 桌面应用 | Tauri（Rust + React） | 桌面管理应用，内置前两者作为 sidecar |
 
 ## 5. rdp-worker（C）
 
@@ -316,6 +319,8 @@ rdp_mcp/
 |---|---|---|
 | 2026-11-04 | v0.1 | 初版设计 |
 | 2026-11-04 | v0.2 | 加入 Tauri 桌面 UI；服务独立运行与运行时文件；管理 API；控制模式与人工接管；钥匙串密码；光标合成；配置热加载；可观测性、测试策略、打包方案 |
+| 2026-11-04 | v0.5 | 桌面 UI（U1–U4）首版：Tauri 2 + React；Rust 侧只做服务发现/启停（sidecar 用标准库 `Command` + `setsid` 启动，因此不使用 `shell` 插件）、托盘、单实例、开机自启、关闭到托盘；前端也可在浏览器里运行（Playwright 端到端测试用）；`RDP_MCP_DATA_DIR` 覆盖数据目录用于测试/多实例。macOS 打包：`scripts/bundle-macos-libs.py` 把 FreeRDP 及其依赖放进 `Contents/Frameworks` 并改写 install name，产出未签名 .dmg |
 | 2026-11-04 | v0.4 | 管理 API 全部实现（M6）；`run_command` 先确认运行对话框出现再输入、`conhost --headless` 无窗口启动并带回退（M8）；`run_command detach` + `job` 工具（D19）；服务端 OCR（D16，`screenshot ocr`）；`file search` / `append`；fakeworker 自动化测试；CI 工作流与 Dockerfile。决定不做：`system` / `inspect` 工具、`session lock`、`service install` |
+| 2026-11-04 | v0.4.1 | 产品更名为 Remoter（D20）：桌面应用名与 bundle id、文档标题、MCP 服务显示名；技术名称不变 |
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `rdp-mcp trust` 命令 |

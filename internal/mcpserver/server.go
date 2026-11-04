@@ -45,7 +45,7 @@ If a tool says the machine is under human control or paused, stop and wait for t
 
 // MCP returns a configured MCP server.
 func (s *Server) MCP() *mcp.Server {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "rdp-mcp", Title: "RDP MCP", Version: s.version},
+	srv := mcp.NewServer(&mcp.Implementation{Name: "rdp-mcp", Title: "Remoter", Version: s.version},
 		&mcp.ServerOptions{Instructions: instructions})
 
 	mcp.AddTool(srv, &mcp.Tool{Name: "list_machines",
