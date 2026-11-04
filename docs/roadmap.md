@@ -12,6 +12,8 @@
 | M4 | 剪贴板、动态分辨率、`wait` 屏幕稳定检测、光标合成 | | ✅ 已在 Windows 11 验证（剪贴板双向含中文、动态分辨率） |
 | M5 | drive 映射；`file`、`run_command` | 远程执行命令、上传下载文件 | ✅ 已在 Windows 11 验证（powershell/cmd、退出码、中文输出、二进制文件往返校验） |
 | M6 | 管理 API（REST + SSE + 实时画面 WS）、事件总线、审计日志、配置写回与热加载、钥匙串 | 用 curl/websocat 完成全部管理操作 | 🟡 已实现：服务信息/关闭、机器列表与会话操作、控制模式、紧急停止、截图、证书重置、SSE、审计查询、钥匙串（CLI）、配置热加载；未实现：机器增删改、配置写回、实时画面 WS |
+| M7 | 感知与异步（来源：[对比 win-rdp-mcp](comparison-win-rdp-mcp.md)）：服务端 OCR（tesseract，`screenshot ocr`）、`run_command detach` + `job` 工具（状态/输出/取消/列表）、`system` 工具（进程/服务/注册表/计划任务/事件日志/网络/系统信息）、`inspect` 工具（窗口列表、聚焦、移动/改大小、UIA 元素树，零常驻）、`file search`/`append`、`session lock`、工具描述中的常用配方 | 模型无需手写 PowerShell 即可完成常见运维与界面定位 | ⬜ |
+| M8 | 健壮性：`run_command` 先确认运行对话框已弹出再输入、避免终端窗口闪现；连接后立即被断开时快速重试；会话 / IPC / MCP 工具的自动化测试（fake worker） | | ⬜ |
 
 ## 桌面 UI
 
@@ -31,9 +33,10 @@
 
 建议顺序：M1 → M2 → M3 → M6（管理 API 基础部分）→ U1 → U2 → M4 → U3 → M5 → U4 → R1 → R2。
 
+当前（2026-11-04 起）：服务端 M6 收尾 → M8 → M7 → R1，与 UI U1 → U4 → R2 并行。
+
 ## 后续想法（未排期）
 
-- OCR / UIAutomation 辅助定位元素
 - RemoteApp（rail）模式执行命令
 - 文件剪贴板
 - 多显示器
