@@ -5,7 +5,7 @@ import type { Discovery } from "@/api/types";
 import { ApiClient } from "@/api/client";
 import { invoke, isTauri } from "./tauri";
 
-const LS_KEY = "rdp_mcp.dev_service";
+const LS_KEY = "remoter.dev_service";
 
 interface DevService {
   listen: string;
@@ -27,7 +27,7 @@ function devService(): DevService | null {
     /* ignore */
   }
   const env = import.meta.env;
-  if (env.VITE_RDP_LISTEN && env.VITE_RDP_TOKEN) return { listen: env.VITE_RDP_LISTEN, token: env.VITE_RDP_TOKEN };
+  if (env.VITE_REMOTER_LISTEN && env.VITE_REMOTER_TOKEN) return { listen: env.VITE_REMOTER_LISTEN, token: env.VITE_REMOTER_TOKEN };
   return null;
 }
 

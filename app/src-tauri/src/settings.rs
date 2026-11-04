@@ -1,4 +1,4 @@
-//! 应用级设置（仅 UI 自身的偏好，不是 rdp-mcp 的配置；服务配置只通过管理 API 修改）。
+//! 应用级设置（仅 UI 自身的偏好，不是 remoter-mcp 的配置；服务配置只通过管理 API 修改）。
 
 use serde::{Deserialize, Serialize};
 use std::fs;

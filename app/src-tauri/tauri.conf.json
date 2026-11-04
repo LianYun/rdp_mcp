@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "rdp_mcp",
+  "productName": "Remoter",
   "version": "0.1.0",
-  "identifier": "com.lianyun.rdp-mcp",
+  "identifier": "com.lianyun.remoter",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://127.0.0.1:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "rdp_mcp",
+        "title": "Remoter",
         "width": 1240,
         "height": 800,
         "minWidth": 960,
@@ -28,8 +28,8 @@
     "active": true,
     "targets": "all",
     "category": "DeveloperTool",
-    "shortDescription": "rdp_mcp Desktop",
-    "longDescription": "Manage the rdp-mcp service: Windows machines over RDP for MCP clients.",
+    "shortDescription": "Remoter",
+    "longDescription": "Desktop manager for the remoter-mcp service: control Windows machines over RDP from MCP clients.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -37,7 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/rdp-mcp", "binaries/rdp-worker"],
+    "externalBin": ["binaries/remoter-mcp", "binaries/remoter-worker"],
     "macOS": {
       "minimumSystemVersion": "11.0",
       "entitlements": "entitlements.plist"

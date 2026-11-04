@@ -63,7 +63,7 @@ export default function Activity() {
   const exportJsonl = async () => {
     try {
       const stamp = new Date().toISOString().slice(0, 10);
-      if (await saveBytes(`rdp-mcp-activity-${stamp}.jsonl`, new Blob([toJsonl(rows)], { type: "application/x-ndjson" }))) toast.success(t("settings.saved"));
+      if (await saveBytes(`remoter-activity-${stamp}.jsonl`, new Blob([toJsonl(rows)], { type: "application/x-ndjson" }))) toast.success(t("settings.saved"));
     } catch (e) {
       toast.error(e);
     }

@@ -1,4 +1,4 @@
-// 启动 e2e 所需的真实后端：FreeRDP 示例服务器 + rdp-mcp 服务。
+// 启动 e2e 所需的真实后端：FreeRDP 示例服务器 + remoter-mcp 服务。
 // 只使用 /tmp/rdptest-ui、端口 13390 / 18766；只终止自己启动的进程（PID 写入 state.json）。
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -32,12 +32,12 @@ export default async function globalSetup() {
   for (const d of ["cfg", "data", "bin", "shots", "cert"]) fs.mkdirSync(path.join(ROOT, d), { recursive: true });
 
   // 1) 构建本次测试用的服务与 worker（输出到 /tmp/rdptest-ui/bin，不碰 build/）
-  const svc = path.join(ROOT, "bin/rdp-mcp");
-  const worker = process.env.E2E_WORKER || path.join(REPO, "build/bin/rdp-worker");
+  const svc = path.join(ROOT, "bin/remoter-mcp");
+  const worker = process.env.E2E_WORKER || path.join(REPO, "build/bin/remoter-worker");
   if (!process.env.E2E_SKIP_BUILD) {
-    execFileSync("go", ["build", "-o", svc, "./cmd/rdp-mcp"], { cwd: REPO, stdio: "inherit" });
+    execFileSync("go", ["build", "-o", svc, "./cmd/remoter-mcp"], { cwd: REPO, stdio: "inherit" });
   }
-  if (!fs.existsSync(worker)) throw new Error(`rdp-worker not found at ${worker} (run make worker)`);
+  if (!fs.existsSync(worker)) throw new Error(`remoter-worker not found at ${worker} (run make worker)`);
 
   // 2) 证书与示例服务器
   const cert = path.join(ROOT, "cert");

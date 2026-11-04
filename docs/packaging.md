@@ -71,11 +71,11 @@ make app-sidecars   # 只准备 sidecar（cargo check / tauri dev 之前）
 
 `scripts/build-app.sh` 依次：`make worker service` → 复制为 `app/src-tauri/binaries/remoter-mcp-<triple>`、`remoter-worker-<triple>`（Tauri `externalBin` 约定，`<triple>` 取自 `rustc -vV`；该目录不入库）→ macOS 上运行 `scripts/bundle-macos-libs.py` → `pnpm install --frozen-lockfile && pnpm tauri build`。`tauri build` 之前必须已有 `binaries/`，否则 `tauri-build` 报缺少 sidecar。
 
-产物在 `app/src-tauri/target/release/bundle/`：`macos/remoter.app`、`dmg/remoter_<ver>_<arch>.dmg`（macOS）；`appimage/*.AppImage`、`deb/*.deb`（Linux）。
+产物在 `app/src-tauri/target/release/bundle/`：`macos/Remoter.app`、`dmg/Remoter_<ver>_<arch>.dmg`（macOS）；`appimage/*.AppImage`、`deb/*.deb`（Linux）。
 
 ### 6.2 sidecar 的查找与布局
 
-Tauri 打包后 sidecar 去掉 triple 后缀，与应用可执行文件同目录（macOS：`remoter.app/Contents/MacOS/{remoter-mcp,remoter-worker}`；动态库在 `Contents/Frameworks/`）。Rust 侧按以下顺序找可执行文件：环境变量 `REMOTER_MCP_BIN` / `REMOTER_MCP_WORKER` → 与应用同目录 → 开发目录（`src-tauri/binaries`、`build/bin`）→ `PATH`。启动命令为 `remoter-mcp serve --managed-by ui-sidecar --worker <remoter-worker>`，进程用 `setsid` 脱离 UI。
+Tauri 打包后 sidecar 去掉 triple 后缀，与应用可执行文件同目录（macOS：`Remoter.app/Contents/MacOS/{remoter-mcp,remoter-worker}`；动态库在 `Contents/Frameworks/`）。Rust 侧按以下顺序找可执行文件：环境变量 `REMOTER_MCP_BIN` / `REMOTER_MCP_WORKER` → 与应用同目录 → 开发目录（`src-tauri/binaries`、`build/bin`）→ `PATH`。启动命令为 `remoter-mcp serve --managed-by ui-sidecar --worker <remoter-worker>`，进程用 `setsid` 脱离 UI。
 
 测试/多实例：设置 `REMOTER_MCP_DATA_DIR=<dir>` 后，应用把该目录当作数据目录（读取 `<dir>/run/service.json`），并以 `--config <dir>/configs.yaml`（或 `REMOTER_MCP_CONFIG`）启动服务；此时不检测 launchd/systemd，不启用单实例插件，应用设置存在 `<dir>/ui-settings.json`。
 
@@ -87,15 +87,15 @@ Tauri 打包后 sidecar 去掉 triple 后缀，与应用可执行文件同目录
 
 首次打开：
 
-- 把 `remoter.app` 拖到「应用程序」后，在访达中**右键 → 打开 → 打开**；或
-- 终端执行 `xattr -cr /Applications/remoter.app` 去掉隔离属性后正常双击。
+- 把 `Remoter.app` 拖到「应用程序」后，在访达中**右键 → 打开 → 打开**；或
+- 终端执行 `xattr -cr /Applications/Remoter.app` 去掉隔离属性后正常双击。
 
 正式签名与公证（Developer ID + `notarytool`）是后续工作：在 `tauri.conf.json` 设置 `bundle.macOS.signingIdentity`，并提供 `APPLE_*` 环境变量；`scripts/bundle-macos-libs.py` 里的 ad-hoc 签名届时由 Tauri 重新签名覆盖。
 
 ### 6.4 验证打包结果
 
 ```bash
-APP=app/src-tauri/target/release/bundle/macos/remoter.app
+APP=app/src-tauri/target/release/bundle/macos/Remoter.app
 # 1) 不能再引用 Homebrew 等非系统路径
 for f in $APP/Contents/MacOS/* $APP/Contents/Frameworks/*.dylib; do
   otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/usr/local' && echo "BAD $f"
@@ -107,7 +107,7 @@ machines: [{name: sample, host: 127.0.0.1, port: 13390, username: test, password
 EOF
 REMOTER_MCP_DATA_DIR=/tmp/x $APP/Contents/MacOS/remoter &
 # /tmp/x/run/service.json 中 managed_by 应为 ui-sidecar；POST /machines/sample/connect 成功；
-# lsof -p <worker pid> 里 dylib 全部来自 remoter.app/Contents/Frameworks，没有 /opt/homebrew
+# lsof -p <worker pid> 里 dylib 全部来自 Remoter.app/Contents/Frameworks，没有 /opt/homebrew
 ```
 
 ### 6.5 Linux：AppImage 与 .deb（配置说明，未在本机构建）

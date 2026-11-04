@@ -101,7 +101,7 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("main")
         .icon(dot_icon(Light::Stopped))
-        .tooltip("rdp_mcp")
+        .tooltip("Remoter")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, ev| match ev.id.as_ref() {
@@ -129,7 +129,7 @@ fn spawn_action(app: &AppHandle, action: &'static str) {
             _ => service::emergency_stop(),
         };
         if let Err(e) = r {
-            let _ = app.notification().builder().title("rdp_mcp").body(e).show();
+            let _ = app.notification().builder().title("Remoter").body(e).show();
         }
     });
 }
@@ -162,7 +162,7 @@ fn apply(app: &AppHandle, light: Light, connected: Option<usize>) {
     };
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_icon(Some(dot_icon(light)));
-        let _ = tray.set_tooltip(Some(format!("rdp_mcp — {text}")));
+        let _ = tray.set_tooltip(Some(format!("Remoter — {text}")));
     }
     if let Some(it) = app.state::<TrayState>().0.lock().unwrap().as_ref() {
         let _ = it.status.set_text(text);
@@ -197,7 +197,7 @@ pub fn spawn_monitor(app: AppHandle) {
                     was_running = false;
                     crashed = true;
                     let lang = settings::current(&app).language;
-                    let _ = app.notification().builder().title("rdp_mcp").body(tr(&lang, "crashed")).show();
+                    let _ = app.notification().builder().title("Remoter").body(tr(&lang, "crashed")).show();
                 }
                 apply(&app, if crashed { Light::Crashed } else { Light::Stopped }, None);
             }

@@ -49,7 +49,7 @@ export const zh: Record<string, string> = {
   "service.stop": "停止服务",
   "service.restart": "重启服务",
   "service.open_logs": "打开日志目录",
-  "service.stop_confirm_title": "停止 rdp-mcp 服务？",
+  "service.stop_confirm_title": "停止 remoter-mcp 服务？",
   "service.stop_confirm_desc": "所有机器会话将断开，MCP 客户端将无法调用工具。",
   "service.external_manager": "检测到由 {m} 管理的服务，启动将通过 {m} 完成。",
 
@@ -244,7 +244,7 @@ export const zh: Record<string, string> = {
   "settings.app.language": "语言",
   "settings.app.data_dir": "数据目录",
   "settings.app.version": "应用版本",
-  "settings.app.sidecar_missing": "未找到内置的 rdp-mcp，无法由应用启动服务。",
+  "settings.app.sidecar_missing": "未找到内置的 remoter-mcp，无法由应用启动服务。",
   "settings.app.browser_mode": "当前在浏览器中运行，部分选项仅在桌面应用中生效。",
   "settings.raw.title": "原始 YAML",
   "settings.raw.hint": "保存时由服务校验，校验失败不会写入。",

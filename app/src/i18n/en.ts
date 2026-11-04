@@ -51,7 +51,7 @@ export const en: Record<keyof typeof zh, string> = {
   "service.stop": "Stop service",
   "service.restart": "Restart service",
   "service.open_logs": "Open logs folder",
-  "service.stop_confirm_title": "Stop the rdp-mcp service?",
+  "service.stop_confirm_title": "Stop the remoter-mcp service?",
   "service.stop_confirm_desc": "All machine sessions will be disconnected and MCP clients will not be able to call tools.",
   "service.external_manager": "A service managed by {m} was detected; it will be started through {m}.",
 
@@ -246,7 +246,7 @@ export const en: Record<keyof typeof zh, string> = {
   "settings.app.language": "Language",
   "settings.app.data_dir": "Data directory",
   "settings.app.version": "App version",
-  "settings.app.sidecar_missing": "The bundled rdp-mcp was not found; the app cannot start the service.",
+  "settings.app.sidecar_missing": "The bundled remoter-mcp was not found; the app cannot start the service.",
   "settings.app.browser_mode": "Running in a browser: some options only take effect in the desktop app.",
   "settings.raw.title": "Raw YAML",
   "settings.raw.hint": "The service validates on save; invalid YAML is not written.",

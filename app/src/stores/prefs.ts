@@ -4,7 +4,7 @@ import { useLang, type Lang } from "@/i18n";
 
 export type Theme = "light" | "dark" | "system";
 
-const THEME_KEY = "rdp_mcp.theme";
+const THEME_KEY = "remoter.theme";
 
 function systemDark(): boolean {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;

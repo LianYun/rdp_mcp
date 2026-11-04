@@ -25,7 +25,7 @@ export function Layout() {
       <aside className="flex w-52 shrink-0 flex-col border-r bg-card/50 p-3">
         <div className="mb-4 flex items-center gap-2 px-2 pt-1 text-base font-semibold">
           <span className={cn("size-2.5 rounded-full", dot)} data-testid="sidebar-dot" data-status={status} />
-          rdp_mcp
+          Remoter
         </div>
         <nav className="space-y-1">
           {items.map(({ to, key, icon: Icon, end }) => (

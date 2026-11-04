@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 // e2e 在 Vite 开发服务器上运行前端，后端是 globalSetup 启动的真实测试服务
-// （FreeRDP 示例服务器 13390 + rdp-mcp 18766，数据目录 /tmp/rdptest-ui），与其他测试环境互不干扰。
+// （FreeRDP 示例服务器 13390 + remoter-mcp 18766，数据目录 /tmp/rdptest-ui），与其他测试环境互不干扰。
 const PORT = 14210;
 
 export default defineConfig({

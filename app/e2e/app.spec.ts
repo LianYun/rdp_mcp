@@ -248,7 +248,7 @@ test("activity timeline shows live tool calls and exports JSONL", async ({ page 
 
 test("logs page shows service log lines", async ({ page }) => {
   await open(page, "/logs");
-  await expect(page.getByTestId("log-view")).toContainText("rdp-mcp started", { timeout: 15_000 });
+  await expect(page.getByTestId("log-view")).toContainText(/mcp started/, { timeout: 15_000 });
   await shot(page, "08-logs");
 });
 

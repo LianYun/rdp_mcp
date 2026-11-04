@@ -1,7 +1,7 @@
 //! 服务发现与进程管理（docs/ui.md §3）。
 //!
 //! Rust 侧保持精简：读取 `<data_dir>/run/service.json`、健康检查、以 sidecar 方式启动
-//! 脱离 UI 的 `rdp-mcp serve`、通过管理 API 优雅停止（SIGTERM/SIGKILL 兜底）、
+//! 脱离 UI 的 `remoter-mcp serve`、通过管理 API 优雅停止（SIGTERM/SIGKILL 兜底）、
 //! 以及 launchd/systemd 适配。
 
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-const LAUNCHD_LABEL: &str = "com.lianyun.rdp-mcp";
-const SYSTEMD_UNIT: &str = "rdp-mcp.service";
+const LAUNCHD_LABEL: &str = "com.lianyun.remoter-mcp";
+const SYSTEMD_UNIT: &str = "remoter-mcp.service";
 
 /// 用户主动停止/重启期间置位，避免监控线程把它当作异常退出。
 pub static INTENTIONAL_STOP: AtomicBool = AtomicBool::new(false);
@@ -48,19 +48,19 @@ pub struct Discovery {
     pub manager: Option<String>,
 }
 
-/// 数据目录：`RDP_MCP_DATA_DIR`（测试/多实例用）优先，否则 `~/.rdp_mcp`。
+/// 数据目录：`REMOTER_MCP_DATA_DIR`（测试/多实例用）优先，否则 `~/.remoter`。
 pub fn data_dir() -> PathBuf {
-    if let Ok(d) = std::env::var("RDP_MCP_DATA_DIR") {
+    if let Ok(d) = std::env::var("REMOTER_MCP_DATA_DIR") {
         if !d.is_empty() {
             return PathBuf::from(d);
         }
     }
-    home_dir().join(".rdp_mcp")
+    home_dir().join(".remoter")
 }
 
 /// 是否使用了数据目录覆盖；此时不触碰 launchd/systemd，也不启用单实例插件。
 pub fn data_dir_overridden() -> bool {
-    std::env::var("RDP_MCP_DATA_DIR").map(|d| !d.is_empty()).unwrap_or(false)
+    std::env::var("REMOTER_MCP_DATA_DIR").map(|d| !d.is_empty()).unwrap_or(false)
 }
 
 fn home_dir() -> PathBuf {
@@ -292,9 +292,9 @@ fn bundled_ossl_modules() -> Option<PathBuf> {
     dir.is_dir().then(|| dir.canonicalize().unwrap_or(dir))
 }
 
-/// 是否能找到 rdp-mcp 可执行文件（设置页提示用）。
+/// 是否能找到 remoter-mcp 可执行文件（设置页提示用）。
 pub fn sidecar_available() -> bool {
-    find_binary("rdp-mcp", "RDP_MCP_BIN").is_some()
+    find_binary("remoter-mcp", "REMOTER_MCP_BIN").is_some()
 }
 
 pub fn logs_dir() -> PathBuf {
@@ -326,14 +326,14 @@ pub fn start() -> Result<Discovery, String> {
         return wait_running(None, Duration::from_secs(20));
     }
 
-    let bin = find_binary("rdp-mcp", "RDP_MCP_BIN").ok_or("rdp-mcp binary not found (set RDP_MCP_BIN)")?;
-    let worker = find_binary("rdp-worker", "RDP_MCP_WORKER");
+    let bin = find_binary("remoter-mcp", "REMOTER_MCP_BIN").ok_or("remoter-mcp binary not found (set REMOTER_MCP_BIN)")?;
+    let worker = find_binary("remoter-worker", "REMOTER_MCP_WORKER");
     let mut cmd = Command::new(&bin);
     cmd.arg("serve").arg("--managed-by").arg("ui-sidecar");
     if let Some(w) = &worker {
         cmd.arg("--worker").arg(w);
     }
-    if let Ok(c) = std::env::var("RDP_MCP_CONFIG") {
+    if let Ok(c) = std::env::var("REMOTER_MCP_CONFIG") {
         if !c.is_empty() {
             cmd.arg("--config").arg(c);
         }
@@ -381,7 +381,7 @@ fn wait_running(mut child: Option<&mut std::process::Child>, timeout: Duration) 
     while Instant::now() < deadline {
         if let Some(c) = child.as_deref_mut() {
             if let Ok(Some(status)) = c.try_wait() {
-                return Err(format!("rdp-mcp exited immediately ({status}); see {}", logs_dir().join("sidecar.stderr").display()));
+                return Err(format!("remoter-mcp exited immediately ({status}); see {}", logs_dir().join("sidecar.stderr").display()));
             }
         }
         let d = discover();

@@ -1,5 +1,5 @@
 {
-  "name": "rdp-mcp-desktop",
+  "name": "remoter",
   "private": true,
   "version": "0.1.0",
   "type": "module",

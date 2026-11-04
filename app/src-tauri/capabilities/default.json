@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "rdp_mcp Desktop 主窗口权限",
+  "description": "Remoter 主窗口权限",
   "windows": ["main"],
   "permissions": [
     "core:default",

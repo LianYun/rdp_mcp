@@ -3,7 +3,7 @@
 并改写 install name，使其不再指向 /opt/homebrew。docs/packaging.md §4。
 
 用法：
-  python3 -I scripts/bundle-macos-libs.py --binary app/src-tauri/binaries/rdp-worker-aarch64-apple-darwin \
+  python3 -I scripts/bundle-macos-libs.py --binary app/src-tauri/binaries/remoter-worker-aarch64-apple-darwin \
       --out app/src-tauri/frameworks [--conf app/src-tauri/tauri.macos.conf.json]
 
 做了什么：

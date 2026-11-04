@@ -2,7 +2,7 @@
 
 ## 1. 定位
 
-`rdp_mcp Desktop` 是 rdp-mcp 服务的管理客户端：管理机器、启停服务、实时查看与人工接管、查看模型操作记录。服务不依赖 UI，UI 也可以管理一个由 CLI/launchd/systemd 启动的服务。
+Remoter 桌面应用是 remoter-mcp 服务的管理客户端：管理机器、启停服务、实时查看与人工接管、查看模型操作记录。服务不依赖 UI，UI 也可以管理一个由 CLI/launchd/systemd 启动的服务。
 
 ## 2. 技术栈
 
@@ -21,8 +21,8 @@
 
 | Tauri command | 说明 |
 |---|---|
-| `service_discover` | 读 `<data_dir>/run/service.json`（`data_dir` 默认 `~/.rdp_mcp`，环境变量 `RDP_MCP_DATA_DIR` 可覆盖）并做健康检查，返回 `{running, listen, admin_token, managed_by, pid, version, config_path, data_dir, error?, manager?}`（`manager` 为停止状态下检测到的 launchd/systemd 服务） |
-| `service_start` | 已运行则直接附着；有 launchd/systemd 服务则通过它启动；否则以 sidecar 启动 `rdp-mcp serve --managed-by ui-sidecar --worker <内置 rdp-worker 路径>`，进程脱离 UI（`setsid`），等待 `service.json` 出现且健康检查通过 |
+| `service_discover` | 读 `<data_dir>/run/service.json`（`data_dir` 默认 `~/.remoter`，环境变量 `REMOTER_MCP_DATA_DIR` 可覆盖）并做健康检查，返回 `{running, listen, admin_token, managed_by, pid, version, config_path, data_dir, error?, manager?}`（`manager` 为停止状态下检测到的 launchd/systemd 服务） |
+| `service_start` | 已运行则直接附着；有 launchd/systemd 服务则通过它启动；否则以 sidecar 启动 `remoter-mcp serve --managed-by ui-sidecar --worker <内置 remoter-worker 路径>`，进程脱离 UI（`setsid`），等待 `service.json` 出现且健康检查通过 |
 | `service_stop` | `managed_by` 为 launchd/systemd 时走 `launchctl bootout` / `systemctl --user stop`；否则优先 `POST /service/shutdown`，8 秒后发 SIGTERM，再 5 秒后 SIGKILL（并清理残留的 `service.json`） |
 | `service_restart` | stop + start |
 | `service_logs_path` | 返回日志目录 |
@@ -30,13 +30,13 @@
 | `app_settings_get/set` | UI 自身偏好（自动启动服务、退出后服务继续运行、关闭到托盘、语言），存 `app_config_dir/settings.json`；**不是**服务配置，服务配置只走管理 API |
 | `app_info` | 应用版本、数据目录、是否找到内置 sidecar |
 | `save_file` | 保存截图等二进制文件（目标路径来自 `dialog` 插件的保存对话框） |
-| `launchd/systemd` 适配 | 检测 `managed_by` 为 launchd/systemd 时，用 `launchctl kickstart/bootout` 或 `systemctl --user start/stop`；检测停止状态下是否安装了 `~/Library/LaunchAgents/com.lianyun.rdp-mcp.plist` / `~/.config/systemd/user/rdp-mcp.service` |
+| `launchd/systemd` 适配 | 检测 `managed_by` 为 launchd/systemd 时，用 `launchctl kickstart/bootout` 或 `systemctl --user start/stop`；检测停止状态下是否安装了 `~/Library/LaunchAgents/com.lianyun.remoter-mcp.plist` / `~/.config/systemd/user/remoter-mcp.service` |
 
 其他：系统托盘（见下）；单实例；开机自启（`autostart` 插件，`--minimized` 启动时隐藏主窗口）；关闭主窗口最小化到托盘；退出 UI 时若“服务随 UI 退出”则停止由 UI 自己启动（`managed_by=ui-sidecar`）的服务；后台线程每 3 秒刷新托盘，服务意外退出（非用户操作）时发系统通知并把托盘灯变红。
 
 **托盘**：圆点图标表示状态（绿＝运行中；黄＝有机器失败或被暂停；灰＝已停止；红＝异常退出），提示文字含已连接机器数；菜单：状态行、打开主窗口、启动/停止/重启服务、紧急停止（全部暂停）、退出。语言跟随应用设置。
 
-**浏览器模式**：前端同时可以在普通浏览器里运行（`pnpm dev`、Playwright）。此时没有 Rust 侧：服务地址与 token 来自 URL 参数 `?listen=127.0.0.1:8765&token=…`（保存在 localStorage）或 `VITE_RDP_LISTEN` / `VITE_RDP_TOKEN`，只能附着，不能启停进程；应用设置存 localStorage。
+**浏览器模式**：前端同时可以在普通浏览器里运行（`pnpm dev`、Playwright）。此时没有 Rust 侧：服务地址与 token 来自 URL 参数 `?listen=127.0.0.1:8765&token=…`（保存在 localStorage）或 `VITE_REMOTER_LISTEN` / `VITE_REMOTER_TOKEN`，只能附着，不能启停进程；应用设置存 localStorage。
 
 ## 4. 页面
 
@@ -98,11 +98,11 @@ app/
     lib/          # tauri.ts（桥接）、service.ts、snippets.ts、rdpfile.ts、machineForm.ts、input.ts …
     i18n/         # zh.ts（默认与回退）、en.ts
   tests/          # Vitest
-  e2e/            # Playwright（global-setup 启动示例服务器 + 真实 rdp-mcp）
+  e2e/            # Playwright（global-setup 启动示例服务器 + 真实 remoter-mcp）
   src-tauri/
     Cargo.toml  tauri.conf.json  capabilities/
     src/ main.rs  service.rs  tray.rs  settings.rs
-    binaries/     # rdp-mcp-<triple>、rdp-worker-<triple>（构建生成，不入库）
+    binaries/     # remoter-mcp-<triple>、remoter-worker-<triple>（构建生成，不入库）
     frameworks/   # macOS 打包的 dylib（构建生成，不入库）
 ```
 
@@ -115,7 +115,7 @@ pnpm dev                   # 浏览器模式：http://127.0.0.1:1420/?listen=127
 pnpm tauri dev             # 桌面应用
 pnpm build                 # tsc + vite
 pnpm test                  # Vitest
-pnpm test:e2e              # Playwright：自动启动 FreeRDP 示例服务器(13390) 与 rdp-mcp(18766)，数据目录 /tmp/rdptest-ui
+pnpm test:e2e              # Playwright：自动启动 FreeRDP 示例服务器(13390) 与 remoter-mcp(18766)，数据目录 /tmp/rdptest-ui
 cd src-tauri && cargo check && cargo clippy && cargo test
-RDP_MCP_DATA_DIR=/tmp/x ./target/debug/rdp-mcp-desktop   # 用测试数据目录运行桌面应用
+REMOTER_MCP_DATA_DIR=/tmp/x ./target/debug/remoter   # 用测试数据目录运行桌面应用
 ```

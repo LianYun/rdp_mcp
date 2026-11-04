@@ -32,7 +32,7 @@ export const defaultAppSettings: AppSettings = {
 };
 
 /** 浏览器模式下把应用设置存在 localStorage。 */
-const LS_KEY = "rdp_mcp.app_settings";
+const LS_KEY = "remoter.app_settings";
 
 export async function getAppSettings(): Promise<AppSettings> {
   if (isTauri()) return invoke<AppSettings>("app_settings_get");
