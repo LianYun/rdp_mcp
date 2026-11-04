@@ -108,6 +108,10 @@ type Shot struct {
 	CursorY      int         `json:"cursor_y"`
 	DirtySeq     int         `json:"-"`
 	Image        image.Image `json:"-"`
+	// Source is the unscaled desktop pixels the image was made from (for OCR);
+	// Origin is the desktop position of Source's (0,0).
+	Source image.Image `json:"-"`
+	Origin image.Point `json:"-"`
 }
 
 // CaptureRGBA grabs the full-resolution framebuffer.
@@ -172,7 +176,7 @@ func (o *Ops) Screenshot(opt ShotOptions) (*Shot, error) {
 		}
 		x0, y0 := o.ToShot(real.Min.X, real.Min.Y)
 		return &Shot{
-			Data: data, MIME: mime, Image: out,
+			Data: data, MIME: mime, Image: out, Source: crop, Origin: real.Min,
 			Width: out.Bounds().Dx(), Height: out.Bounds().Dy(), ScreenWidth: w, ScreenHeight: h,
 			Scale: sc, Region: []int{x0, y0, rr.Dx(), rr.Dy()}, Zoom: zoom / sc,
 			CursorX: int(math.Round(float64(cur.X) * sc)), CursorY: int(math.Round(float64(cur.Y) * sc)),
@@ -191,7 +195,7 @@ func (o *Ops) Screenshot(opt ShotOptions) (*Shot, error) {
 		return nil, err
 	}
 	return &Shot{
-		Data: data, MIME: mime, Image: out,
+		Data: data, MIME: mime, Image: out, Source: img,
 		Width: out.Bounds().Dx(), Height: out.Bounds().Dy(), ScreenWidth: w, ScreenHeight: h, Scale: sc,
 		CursorX: int(math.Round(float64(cur.X) * sc)), CursorY: int(math.Round(float64(cur.Y) * sc)),
 	}, nil

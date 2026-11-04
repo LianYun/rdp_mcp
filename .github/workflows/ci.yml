@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install FreeRDP and tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config freerdp3-dev tesseract-ocr
+      - name: Install FreeRDP and tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install freerdp pkg-config tesseract
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test -race ./...
+      - name: build
+        run: make all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rdp-mcp-${{ runner.os }}
+          path: build/bin/
+
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t rdp-mcp:ci -f packaging/Dockerfile .
+      - name: Smoke test
+        run: docker run --rm --entrypoint rdp-mcp rdp-mcp:ci version

@@ -13,7 +13,8 @@
 | M5 | drive 映射；`file`、`run_command` | 远程执行命令、上传下载文件 | ✅ 已在 Windows 11 验证（powershell/cmd、退出码、中文输出、二进制文件往返校验） |
 | M6 | 管理 API（REST + SSE + 实时画面 WS）、事件总线、审计日志、配置写回与热加载、钥匙串 | 用 curl/websocat 完成全部管理操作 | ✅ 全部接口已实现（机器增删改与写回、钥匙串、试连、证书确认、配置读写、实时画面与接管 WS、日志、审计缩略图、token 轮换），有 httptest 覆盖 |
 | M7a | `run_command detach` + `job` 工具（list/status/output/cancel/remove） | 长任务不阻塞，可查询输出与取消 | ✅ 有自动化测试，待真实 Windows 验证 |
-| M7 | 感知与异步（来源：[对比 win-rdp-mcp](comparison-win-rdp-mcp.md)）：服务端 OCR（tesseract，`screenshot ocr`）、`run_command detach` + `job` 工具（状态/输出/取消/列表）、`system` 工具（进程/服务/注册表/计划任务/事件日志/网络/系统信息）、`inspect` 工具（窗口列表、聚焦、移动/改大小、UIA 元素树，零常驻）、`file search`/`append`、`session lock`、工具描述中的常用配方 | 模型无需手写 PowerShell 即可完成常见运维与界面定位 | ⬜ |
+| M7b | 服务端 OCR（tesseract，`screenshot ocr` / `ocr_only`）；`file search`、`file upload append` | 模型能按文字定位可点击位置、按名称查找文件 | ✅ OCR 有真实 tesseract 测试；file search/append 待真实 Windows 验证 |
+| M7c | （不做）`system` 预设运维工具、`inspect` 窗口与 UIA 工具、`session lock`、工具描述中的运维配方 | — | ❌ 2026-11-04 决定不做；需要时用 `run_command` |
 | M8 | 健壮性：`run_command` 先确认运行对话框已弹出再输入、避免终端窗口闪现；连接后立即被断开时快速重试；会话 / IPC / MCP 工具的自动化测试（fake worker） | | 🟡 已实现并有自动化测试（fake worker 模拟 RDP 与运行对话框）；`conhost --headless` 无窗口启动待真实 Windows 验证 |
 
 ## 桌面 UI
@@ -29,7 +30,7 @@
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
-| R1 | Makefile、CI（lint/test/build）、Docker 镜像、launchd/systemd 安装 | 🟡 Makefile 已有 |
+| R1 | Makefile、CI（lint/test/build）、Docker 镜像 | 🟡 Makefile、CI 工作流、`packaging/Dockerfile` 已有；CI 未在 GitHub 上跑过。安装为系统服务（`service install`）不做 |
 | R2 | macOS dylib 打包、签名公证；Linux AppImage/deb；GitHub Release | ⬜ |
 
 建议顺序：M1 → M2 → M3 → M6（管理 API 基础部分）→ U1 → U2 → M4 → U3 → M5 → U4 → R1 → R2。

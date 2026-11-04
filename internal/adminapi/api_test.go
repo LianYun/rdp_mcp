@@ -102,7 +102,7 @@ func TestMachineCRUDPreservesComments(t *testing.T) {
 	if code != 200 || out["name"] != "c" {
 		t.Fatalf("rename: %d %v", code, out)
 	}
-	if _, err := a.Mgr.Get("b"); err == nil {
+	if _, err := a.Mgr.Lookup("b"); err == nil {
 		t.Fatal("old name still present")
 	}
 	if kc["c"] != "s3cret" || kc["b"] != "" {
@@ -202,5 +202,20 @@ func TestMCPTokenRotate(t *testing.T) {
 	}
 	if a.Mgr.Config().Server.MCPToken != out["mcp_token"] {
 		t.Fatal("token not applied")
+	}
+}
+
+func TestDisabledMachine(t *testing.T) {
+	_, h, _, _ := newTestAPI(t)
+	code, out := do(t, h, "PUT", "/api/v1/machines/a", `{"host":"10.0.0.1","username":"u","enabled":false}`)
+	if code != 200 || out["enabled"] != false {
+		t.Fatalf("disable: %d %v", code, out)
+	}
+	if code, _ := do(t, h, "GET", "/api/v1/machines/a", ""); code != 200 {
+		t.Fatalf("disabled machine not readable: %d", code)
+	}
+	code, out = do(t, h, "POST", "/api/v1/machines", `{"name":"d","host":"h","username":"u","enabled":false}`)
+	if code != 201 || out["enabled"] != false {
+		t.Fatalf("create disabled: %d %v", code, out)
 	}
 }

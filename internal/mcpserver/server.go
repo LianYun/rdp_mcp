@@ -7,13 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/LianYun/rdp_mcp/internal/audit"
+	"github.com/LianYun/rdp_mcp/internal/ocr"
 	"github.com/LianYun/rdp_mcp/internal/remote"
 	"github.com/LianYun/rdp_mcp/internal/session"
 )
@@ -22,6 +25,10 @@ type Server struct {
 	mgr     *session.Manager
 	audit   *audit.Logger
 	version string
+
+	ocrMu  sync.Mutex
+	ocr    *ocr.Engine
+	ocrKey string
 }
 
 func New(mgr *session.Manager, al *audit.Logger, version string) *Server {
@@ -45,7 +52,7 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "List configured Windows machines with connection state, control mode and resolution."},
 		wrap(s, "list_machines", s.listMachines))
 	mcp.AddTool(srv, &mcp.Tool{Name: "screenshot",
-		Description: "Capture the screen of a machine. Connects automatically if needed. Coordinates used by other tools refer to this image."},
+		Description: "Capture the screen of a machine. Connects automatically if needed. Coordinates used by other tools refer to this image. Pass ocr: true to also get every text line with its box and clickable center (works on any app, even when the desktop is locked); region zooms in without changing the coordinate system."},
 		wrap(s, "screenshot", s.screenshot))
 	mcp.AddTool(srv, &mcp.Tool{Name: "mouse",
 		Description: "Mouse action at screenshot coordinates: move, click, double_click, right_click, middle_click, down, up, drag (x,y -> to_x,to_y), scroll (direction + amount)."},
@@ -63,7 +70,7 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "Manage commands started with run_command detach:true: list, status, output (tail of stdout/stderr), cancel (kills the process tree), remove (forget a finished job)."},
 		wrap(s, "job", s.jobTool))
 	mcp.AddTool(srv, &mcp.Tool{Name: "file",
-		Description: "Transfer files: upload (local_path or content -> remote_path), download (remote_path -> local_path, or return text content if local_path is empty), list (remote directory). local_path refers to the machine running this MCP server."},
+		Description: "Transfer files: upload (local_path or content -> remote_path; append: true appends), download (remote_path -> local_path, or return text content if local_path is empty), list (remote directory), search (recursive name pattern under remote_path, e.g. pattern *.log). local_path refers to the machine running this MCP server."},
 		wrap(s, "file", s.file))
 	mcp.AddTool(srv, &mcp.Tool{Name: "session",
 		Description: "Manage the RDP session: connect, disconnect, reconnect, status, set_resolution (width,height), send_ctrl_alt_del."},
@@ -225,6 +232,60 @@ type screenshotIn struct {
 	Region   *Region `json:"region,omitempty" jsonschema:"zoom into this region (in coordinates of the last full screenshot) at up to native resolution; does not change the coordinate system"`
 	MaxWidth int     `json:"max_width,omitempty" jsonschema:"long side of the returned image in pixels (default 1280). For full screenshots this sets the coordinate scale for following actions"`
 	Format   string  `json:"format,omitempty" jsonschema:"png (default) or jpeg"`
+	OCR      bool    `json:"ocr,omitempty" jsonschema:"also recognize the text on screen (or in region) and return each line with its box and center in screenshot coordinates, ready to click"`
+	OCROnly  bool    `json:"ocr_only,omitempty" jsonschema:"with ocr: return only the text lines, without the image (saves tokens)"`
+}
+
+// ocrLine is one recognized line in screenshot coordinates.
+type ocrLine struct {
+	Text   string  `json:"text"`
+	X      int     `json:"x"`
+	Y      int     `json:"y"`
+	W      int     `json:"w"`
+	H      int     `json:"h"`
+	Center [2]int  `json:"center"`
+	Conf   float64 `json:"conf"`
+}
+
+// recognize runs OCR on the shot's source pixels and maps boxes to screenshot coordinates.
+func (s *Server) recognize(ctx context.Context, shot *session.Shot) ([]ocrLine, string, error) {
+	srv := s.mgr.Config().Server
+	if !srv.OCREnabled() {
+		return nil, "", errors.New("OCR is disabled (server.ocr.enabled: false)")
+	}
+	eng := s.ocrEngine(srv.OCR.Tesseract, srv.OCR.Languages)
+	langs, err := eng.EffectiveLanguages()
+	if err != nil {
+		return nil, "", err
+	}
+	if shot.Source == nil {
+		return nil, langs, errors.New("no source image for OCR")
+	}
+	lines, err := eng.Recognize(ctx, shot.Source)
+	if err != nil {
+		return nil, langs, err
+	}
+	sc := shot.Scale
+	conv := func(v int) int { return int(math.Round(float64(v) * sc)) }
+	out := make([]ocrLine, 0, len(lines))
+	for _, l := range lines {
+		r := l.Box.Add(shot.Origin)
+		x0, y0, x1, y1 := conv(r.Min.X), conv(r.Min.Y), conv(r.Max.X), conv(r.Max.Y)
+		out = append(out, ocrLine{Text: l.Text, X: x0, Y: y0, W: x1 - x0, H: y1 - y0,
+			Center: [2]int{(x0 + x1) / 2, (y0 + y1) / 2}, Conf: math.Round(l.Conf)})
+	}
+	return out, langs, nil
+}
+
+// ocrEngine returns a cached engine for the given settings (they can change on reload).
+func (s *Server) ocrEngine(path, langs string) *ocr.Engine {
+	s.ocrMu.Lock()
+	defer s.ocrMu.Unlock()
+	key := path + "\x00" + langs
+	if s.ocrKey != key || s.ocr == nil {
+		s.ocr, s.ocrKey = &ocr.Engine{Path: path, Languages: langs}, key
+	}
+	return s.ocr
 }
 
 func (s *Server) screenshot(ctx context.Context, in screenshotIn) (*mcp.CallToolResult, error) {
@@ -251,6 +312,21 @@ func (s *Server) screenshot(ctx context.Context, in screenshotIn) (*mcp.CallTool
 			note = fmt.Sprintf("NOTE: control mode is %q; input actions are currently blocked.", m)
 		}
 		res = &mcp.CallToolResult{Content: shotContent(shot, note)}
+		if in.OCR || in.OCROnly {
+			lines, langs, err := s.recognize(ctx, shot)
+			var text string
+			if err != nil {
+				text = "OCR failed: " + err.Error()
+			} else {
+				b, _ := json.Marshal(map[string]any{"languages": langs, "lines": lines})
+				text = "OCR text lines (x,y,w,h and center are screenshot coordinates; click a center to hit the text):\n" + string(b)
+			}
+			if in.OCROnly && err == nil {
+				res.Content = []mcp.Content{res.Content[0], &mcp.TextContent{Text: text}}
+			} else {
+				res.Content = append(res.Content, &mcp.TextContent{Text: text})
+			}
+		}
 		return nil
 	})
 	return res, err
@@ -520,10 +596,13 @@ func (s *Server) jobTool(ctx context.Context, in jobIn) (*mcp.CallToolResult, er
 
 type fileIn struct {
 	Machine    string  `json:"machine" jsonschema:"machine name"`
-	Action     string  `json:"action" jsonschema:"upload | download | list"`
+	Action     string  `json:"action" jsonschema:"upload | download | list | search"`
 	LocalPath  string  `json:"local_path,omitempty" jsonschema:"path on the MCP server machine"`
-	RemotePath string  `json:"remote_path,omitempty" jsonschema:"Windows path on the remote machine (file, or directory for list)"`
+	RemotePath string  `json:"remote_path,omitempty" jsonschema:"Windows path on the remote machine (file, or directory for list/search)"`
 	Content    *string `json:"content,omitempty" jsonschema:"text content to upload instead of local_path"`
+	Append     bool    `json:"append,omitempty" jsonschema:"upload: append to remote_path instead of replacing it"`
+	Pattern    string  `json:"pattern,omitempty" jsonschema:"search: file name pattern with * and ?, e.g. *.log (searched recursively under remote_path)"`
+	Limit      int     `json:"limit,omitempty" jsonschema:"search: maximum results (default 200, max 1000)"`
 	Timeout    int     `json:"timeout,omitempty" jsonschema:"timeout in seconds (default 120)"`
 }
 
@@ -543,7 +622,7 @@ func (s *Server) file(ctx context.Context, in fileIn) (*mcp.CallToolResult, erro
 			if in.LocalPath == "" && in.Content == nil {
 				return errors.New("upload requires local_path or content")
 			}
-			r, err := remote.Upload(o, in.LocalPath, in.Content, in.RemotePath, timeout)
+			r, err := remote.Upload(o, in.LocalPath, in.Content, in.RemotePath, in.Append, timeout)
 			if err != nil {
 				return err
 			}
@@ -572,8 +651,14 @@ func (s *Server) file(ctx context.Context, in fileIn) (*mcp.CallToolResult, erro
 				return err
 			}
 			res = textResult(entries)
+		case "search":
+			entries, truncated, err := remote.Search(o, in.RemotePath, in.Pattern, in.Limit, timeout)
+			if err != nil {
+				return err
+			}
+			res = textResult(map[string]any{"entries": entries, "truncated": truncated})
 		default:
-			return fmt.Errorf("action must be upload, download or list")
+			return fmt.Errorf("action must be upload, download, list or search")
 		}
 		return nil
 	})

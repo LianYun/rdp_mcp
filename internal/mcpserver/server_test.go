@@ -145,6 +145,15 @@ func TestDesktopTools(t *testing.T) {
 		t.Fatalf("wait: %s", text)
 	}
 
+	// OCR: the fake desktop has no text, so expect an empty line list (or an install hint).
+	res, text, img = call(t, cs, "screenshot", map[string]any{"machine": "m1", "ocr": true, "ocr_only": true})
+	if res.IsError || !(strings.Contains(text, `"lines":[]`) || strings.Contains(text, "OCR failed")) {
+		t.Fatalf("ocr: %s", text)
+	}
+	if strings.Contains(text, `"lines":[]`) && img {
+		t.Fatal("ocr_only returned an image")
+	}
+
 	recs, _ := al.Query("m1", "", 100)
 	if len(recs) < 5 {
 		t.Fatalf("audit records: %d", len(recs))

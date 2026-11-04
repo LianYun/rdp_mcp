@@ -177,3 +177,18 @@ func TestReadTailAndDecode(t *testing.T) {
 		t.Fatal(psQuote("it's"))
 	}
 }
+
+func TestParseSearch(t *testing.T) {
+	one := `{"truncated":false,"entries":{"path":"C:\\a.log","type":"file","size":3,"last_write_time":"2026-11-04T10:00:00"}}`
+	e, tr, err := parseSearch(one)
+	if err != nil || len(e) != 1 || e[0].Path != `C:\a.log` || tr {
+		t.Fatal(e, tr, err)
+	}
+	many := `{"truncated":true,"entries":[{"path":"a","type":"file"},{"path":"b","type":"dir"}]}`
+	if e, tr, err = parseSearch(many); err != nil || len(e) != 2 || !tr {
+		t.Fatal(e, tr, err)
+	}
+	if e, _, err = parseSearch(`{"truncated":false,"entries":null}`); err != nil || len(e) != 0 {
+		t.Fatal(e, err)
+	}
+}

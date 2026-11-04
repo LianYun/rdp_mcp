@@ -163,7 +163,7 @@ func (a *API) createMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.apply(cfg)
-	s, err := a.Mgr.Get(m.Name)
+	s, err := a.Mgr.Lookup(m.Name)
 	if err != nil {
 		writeErr(w, 500, "internal", err.Error())
 		return
@@ -225,7 +225,7 @@ func (a *API) updateMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.apply(cfg)
-	s, err := a.Mgr.Get(newName)
+	s, err := a.Mgr.Lookup(newName)
 	if err != nil {
 		writeErr(w, 500, "internal", err.Error())
 		return

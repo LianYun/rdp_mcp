@@ -150,7 +150,7 @@ func (a *API) mcpToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) session(w http.ResponseWriter, r *http.Request) *session.Session {
-	s, err := a.Mgr.Get(r.PathValue("name"))
+	s, err := a.Mgr.Lookup(r.PathValue("name"))
 	if err != nil {
 		writeErr(w, 404, "not_found", err.Error())
 		return nil

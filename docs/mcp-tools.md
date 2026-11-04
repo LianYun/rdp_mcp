@@ -24,8 +24,16 @@
 | region | `{x,y,width,height}` | 否 | 放大查看：区域用**上一张全屏截图**的坐标表示，以不超过原始分辨率输出；不改变后续动作的坐标系，返回文本说明放大图像素与坐标的换算 |
 | max_width | int | 否 | 覆盖默认缩放长边 |
 | format | `png`\|`jpeg` | 否 | 默认 png |
+| ocr | bool | 否 | 同时识别屏幕（或 region）上的文字，返回每行的文本、框和中心点（截图坐标，可直接点击） |
+| ocr_only | bool | 否 | 与 ocr 一起用：只返回文字，不返回图片（省 token） |
 
 返回：文本说明（图片尺寸、真实分辨率、缩放比例、光标位置）+ 图片。png 超过 3MB 自动改用 jpeg。传入 `max_width` 会改变后续动作的坐标系。
+
+OCR 说明（design.md D16）：
+- 在运行 rdp-mcp 的机器上用 tesseract 识别，Windows 端无需任何东西，锁屏或任何应用都可用。
+- 对原始分辨率像素识别（再放大 2 倍提高小字准确率），坐标换算回截图坐标；region 放大时只识别该区域。
+- 返回 `{"languages": "...", "lines": [{"text","x","y","w","h","center":[cx,cy],"conf"}]}`，按从上到下、从左到右排序；中文词之间不加空格。
+- 语言默认自动选择：装了中文语言包时为 `chi_sim+eng`，否则 `eng`；可用 `server.ocr.languages` 指定。未安装 tesseract 时返回安装提示，截图本身照常返回。
 
 ### mouse
 | 参数 | 类型 | 说明 |
@@ -90,11 +98,16 @@ JobInfo：`{id, machine, command, shell, state(running/done/timeout/cancelled/lo
 | 参数 | 类型 | 说明 |
 |---|---|---|
 | machine | string | |
-| action | `upload`\|`download`\|`list` | |
+| action | `upload`\|`download`\|`list`\|`search` | |
 | local_path | string | MCP 服务所在机器的路径；download 时为空则直接返回文本内容（≤1MB） |
-| remote_path | string | Windows 路径（upload 目标可以是目录） |
+| remote_path | string | Windows 路径（upload 目标可以是目录；list/search 为目录） |
 | content | string | upload 时代替 local_path 直接上传文本 |
+| append | bool | upload 时追加到 remote_path 末尾（不存在则创建），而不是覆盖 |
+| pattern | string | search：文件名通配（`*`、`?`），在 remote_path 下递归查找，默认 `*` |
+| limit | int | search：最多返回条数，默认 200，上限 1000 |
 | timeout | int（秒） | 默认 120 |
+
+search 返回 `{"entries": [{"path","type","size","last_write_time"}], "truncated": bool}`。
 
 `file` 基于 `run_command` 实现，同样要求桌面已解锁；暂不支持目录下载。
 

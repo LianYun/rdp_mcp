@@ -155,6 +155,17 @@ func (m *Manager) Get(name string) (*Session, error) {
 	return s, nil
 }
 
+// Lookup returns the session for name regardless of its enabled flag (management API).
+func (m *Manager) Lookup(name string) (*Session, error) {
+	m.mu.RLock()
+	s, ok := m.sessions[name]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("%w %q", ErrUnknownMachine, name)
+	}
+	return s, nil
+}
+
 // List returns all sessions in config order.
 func (m *Manager) List() []*Session {
 	m.mu.RLock()

@@ -149,15 +149,17 @@ rdp-mcp stop                   # 通过管理 API 优雅退出
 rdp-mcp check-config [--config PATH]
 rdp-mcp machine test <name>    # 测试连接并保存一张截图
 rdp-mcp secret set <name>      # 交互输入密码写入钥匙串
-rdp-mcp service install|uninstall   # 安装为 launchd(macOS) / systemd --user(Linux) 服务
 rdp-mcp trust <name>           # 忘记已记录的证书指纹，下次连接重新信任
 rdp-mcp version
 ```
 
-已实现（v0.3）：`serve`、`status`、`stop`、`check-config`（含密码可解析性检查）、`secret set|delete`、`trust`、`version`。
-未实现：`machine test`、`service install|uninstall`。
+已实现（v0.4）：`serve`、`status`、`stop`、`check-config`（含密码可解析性检查）、`secret set|delete`、`trust`、`version`。
+未实现：`machine test`（可用管理 API `POST /machines/{name}/test` 或 UI 代替）。不做：`service install|uninstall`（2026-11-04 决定）。
 
-开发辅助：`go run ./tools/smoke -url ... -machine <name> [-input] [-run "hostname"]` 是一个最小 MCP 客户端，用于冒烟测试。
+开发辅助：
+- `go run ./tools/smoke -url ... -machine <name> [-input] [-run "hostname"] [-call <tool> -args '<json>']`：最小 MCP 客户端，用于冒烟测试。
+- `go run ./tools/wsprobe -url ... -token <admin> -machine <name>`：实时画面 WebSocket 探针。
+- `internal/testutil/fakeworker`：测试二进制扮演 rdp-worker（模拟桌面与运行对话框），用于会话 / MCP 工具 / run_command 的自动化测试。
 
 ### 6.3 运行时与单实例
 
@@ -301,7 +303,7 @@ rdp_mcp/
     src-tauri/             # Rust：sidecar/托盘/自启动
       binaries/            # 构建时放入 rdp-mcp-<triple>、rdp-worker-<triple>
   examples/                # 配置示例
-  packaging/               # Dockerfile、launchd plist、systemd unit、依赖打包脚本
+  packaging/               # Dockerfile、依赖打包脚本
   scripts/
   Makefile                 # make worker | service | app | dist | test
 ```
@@ -314,5 +316,6 @@ rdp_mcp/
 |---|---|---|
 | 2026-11-04 | v0.1 | 初版设计 |
 | 2026-11-04 | v0.2 | 加入 Tauri 桌面 UI；服务独立运行与运行时文件；管理 API；控制模式与人工接管；钥匙串密码；光标合成；配置热加载；可观测性、测试策略、打包方案 |
+| 2026-11-04 | v0.4 | 管理 API 全部实现（M6）；`run_command` 先确认运行对话框出现再输入、`conhost --headless` 无窗口启动并带回退（M8）；`run_command detach` + `job` 工具（D19）；服务端 OCR（D16，`screenshot ocr`）；`file search` / `append`；fakeworker 自动化测试；CI 工作流与 Dockerfile。决定不做：`system` / `inspect` 工具、`session lock`、`service install` |
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `rdp-mcp trust` 命令 |
