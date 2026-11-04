@@ -211,7 +211,8 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 ### 6.6 run_command / file
 
 1. 本地 `~/.rdp_mcp/shares/<machine>/` 经 drive 通道映射为 `\\tsclient\mcp`。
-2. `run_command`：生成 `jobs/<id>.ps1`（结果写到 `jobs/<id>.out|.err|.code`）→ RemoteApp 可用则经 rail 执行，否则 `Win+R` 输入 `powershell -NoP -W Hidden -EP Bypass -File \\tsclient\mcp\jobs\<id>.ps1` 回车 → 轮询 `.code` 或超时 → 返回并清理。
+2. `run_command`：生成 `jobs/<id>.user.ps1`（用户命令）与 `jobs/<id>.ps1`（runner）→ 截图后按 `Win+R`，比较前后画面确认运行对话框已出现（否则不输入任何内容并报错）→ 输入 `conhost.exe --headless powershell … -File \\tsclient\mcp\jobs\<id>.ps1`（无控制台窗口）回车 → 等待 runner 写出 `.started`（10 秒未出现则改用 `powershell -WindowStyle Hidden` 重试；runner 以独占方式创建 `.started`，保证不会执行两次；每台机器记住可用的启动方式）→ runner 记录 `.pid`，用户命令的输出写到 `.out|.err`，退出码写到 `.code` → 服务轮询 `.code` 或超时 → 返回并清理。
+   - `detach: true`：启动确认后立即返回任务 id；后台 goroutine 每秒检查 `.code`，完成时发 `job` 事件；运行期间暂停空闲断开。`job cancel` 用 `taskkill /PID <pid> /T /F` 结束进程树。
 3. `file upload/download`：经共享目录中转 + `Copy-Item`。
 4. 前提：会话处于解锁桌面、无模态弹窗。失败时返回提示并附截图。
 

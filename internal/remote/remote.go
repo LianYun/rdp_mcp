@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -73,123 +72,6 @@ func readCapped(path string) string {
 		s += "\n...[output truncated]"
 	}
 	return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
-}
-
-// RunCommand runs command on the remote machine and returns its output.
-// It must be called inside Session.Do.
-func RunCommand(o *session.Ops, command, shell string, timeout time.Duration) (*Result, error) {
-	s := o.Session()
-	if !s.Resolved().EnableDrive {
-		return nil, errors.New("run_command requires enable_drive: true for this machine")
-	}
-	if timeout <= 0 {
-		timeout = 60 * time.Second
-	}
-	jobs := filepath.Join(s.ShareDir(), "jobs")
-	if err := os.MkdirAll(jobs, 0o700); err != nil {
-		return nil, err
-	}
-	id := newID()
-	local := func(ext string) string { return filepath.Join(jobs, id+ext) }
-	remote := remoteRoot + `\jobs\` + id
-	defer func() {
-		for _, ext := range []string{".ps1", ".user.ps1", ".user.cmd", ".out", ".err", ".code"} {
-			_ = os.Remove(local(ext))
-		}
-	}()
-
-	var userFile, exe, args string
-	switch strings.ToLower(shell) {
-	case "", "powershell", "pwsh", "ps":
-		userFile = ".user.ps1"
-		body := "$ErrorActionPreference = 'Continue'\r\n" +
-			"$ProgressPreference = 'SilentlyContinue'\r\n" +
-			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\r\n" +
-			"$OutputEncoding = [System.Text.Encoding]::UTF8\r\n" +
-			command + "\r\n" +
-			"if ($LASTEXITCODE) { exit $LASTEXITCODE }\r\n"
-		if err := os.WriteFile(local(userFile), utf8BOM(body), 0o600); err != nil {
-			return nil, err
-		}
-		exe = "powershell.exe"
-		args = "'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File'," + psQuote(remote+userFile)
-	case "cmd":
-		userFile = ".user.cmd"
-		body := "@echo off\r\nchcp 65001 >nul\r\n" + strings.ReplaceAll(command, "\n", "\r\n") + "\r\n"
-		if err := os.WriteFile(local(userFile), []byte(body), 0o600); err != nil {
-			return nil, err
-		}
-		exe = "cmd.exe"
-		args = "'/d','/c'," + psQuote(`"`+remote+userFile+`"`)
-	default:
-		return nil, fmt.Errorf("shell must be powershell or cmd")
-	}
-
-	timeoutMs := int(timeout / time.Millisecond)
-	runner := "$base = " + psQuote(remote) + "\r\n" +
-		"try {\r\n" +
-		"  $p = Start-Process -FilePath " + exe + " -ArgumentList " + args +
-		" -RedirectStandardOutput \"$base.out\" -RedirectStandardError \"$base.err\" -NoNewWindow -PassThru\r\n" +
-		// Touch Handle while the process is alive, otherwise ExitCode is $null after WaitForExit.
-		"  $null = $p.Handle\r\n" +
-		"  if (-not $p.WaitForExit(" + strconv.Itoa(timeoutMs) + ")) { try { $p.Kill() } catch {}; $code = 'timeout' } else { $p.WaitForExit(); $code = $p.ExitCode }\r\n" +
-		"  if ($null -eq $code) { $code = 'unknown' }\r\n" +
-		"} catch { $_ | Out-String | Set-Content -LiteralPath \"$base.err\" -Encoding UTF8; $code = 1 }\r\n" +
-		"Set-Content -LiteralPath \"$base.code\" -Value $code -Encoding ASCII\r\n"
-	if err := os.WriteFile(local(".ps1"), utf8BOM(runner), 0o600); err != nil {
-		return nil, err
-	}
-
-	// Launch through the Run dialog.
-	launch := `powershell -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ` + remote + `.ps1`
-	if err := o.Hotkey([]string{"win", "r"}); err != nil {
-		return nil, err
-	}
-	if err := o.Sleep(700 * time.Millisecond); err != nil {
-		return nil, err
-	}
-	if err := o.Hotkey([]string{"ctrl", "a"}); err != nil {
-		return nil, err
-	}
-	if err := o.Type(launch); err != nil {
-		return nil, err
-	}
-	if err := o.Sleep(150 * time.Millisecond); err != nil {
-		return nil, err
-	}
-	if err := o.Press([]string{"enter"}, 1); err != nil {
-		return nil, err
-	}
-
-	// Wait for the result. Give the launcher extra time beyond the command timeout.
-	started := time.Now()
-	deadline := started.Add(timeout + 20*time.Second)
-	for {
-		if b, err := os.ReadFile(local(".code")); err == nil && len(bytes.TrimSpace(b)) > 0 {
-			code := strings.TrimSpace(decodeOutput(b))
-			res := &Result{Stdout: readCapped(local(".out")), Stderr: readCapped(local(".err"))}
-			switch code {
-			case "timeout":
-				res.TimedOut, res.ExitCode = true, -1
-			case "unknown":
-				res.ExitCode = -1
-			default:
-				res.ExitCode, _ = strconv.Atoi(code)
-			}
-			return res, nil
-		}
-		if time.Now().After(deadline) {
-			hint := "the command did not report back. Possible causes: the session is locked or on the login screen, " +
-				"a dialog has focus, the Run dialog is disabled by policy, or drive redirection is blocked on the server"
-			if time.Since(started) < 15*time.Second+timeout {
-				hint = "timed out"
-			}
-			return nil, errors.New(hint)
-		}
-		if err := o.Sleep(300 * time.Millisecond); err != nil {
-			return nil, err
-		}
-	}
 }
 
 // Upload copies a local file (or literal content) to remotePath on the machine.

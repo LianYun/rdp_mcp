@@ -39,6 +39,7 @@ type Session struct {
 	cursor       cursorState
 	viewers      map[chan struct{}]struct{}
 	pendingCert  *certPrompt
+	idleHolds    int  // >0 suspends idle disconnect (e.g. running detached jobs)
 	quiet        bool // test session: no bus events, no cert prompt, no reconnect
 }
 
@@ -521,7 +522,7 @@ func (s *Session) Reconnect(ctx context.Context) error {
 func (s *Session) reapIfIdle() {
 	s.mu.Lock()
 	r := s.cfg
-	idle := s.state == StateConnected && r.IdleDisconnect > 0 && len(s.viewers) == 0 &&
+	idle := s.state == StateConnected && r.IdleDisconnect > 0 && len(s.viewers) == 0 && s.idleHolds == 0 &&
 		time.Since(s.lastActivity) > r.IdleDisconnect
 	s.mu.Unlock()
 	if idle && s.op.TryLock() {
@@ -680,4 +681,25 @@ func (s *Session) State() State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state
+}
+
+// HoldIdle suspends idle disconnect until the returned release func is called.
+func (s *Session) HoldIdle() (release func()) {
+	s.mu.Lock()
+	s.idleHolds++
+	s.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.mu.Lock()
+			s.idleHolds--
+			s.mu.Unlock()
+		})
+	}
+}
+
+// Publish sends an event about this machine on the service event bus.
+func (s *Session) Publish(typ string, data map[string]any) {
+	data["machine"] = s.name
+	s.m.opts.Bus.Publish(typ, data)
 }

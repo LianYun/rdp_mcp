@@ -65,9 +65,26 @@
 | machine | string | |
 | command | string | 命令或脚本内容 |
 | shell | `powershell`\|`cmd` | 默认 powershell |
-| timeout | int（秒） | 默认 60 |
+| timeout | int（秒） | 默认 60；`detach` 时默认 3600 |
+| detach | bool | 后台执行，启动成功后立即返回任务 id，用 `job` 工具跟进 |
 
-返回 `{"exit_code":..,"stdout":"..","stderr":".."}`。依赖解锁的桌面，见 design.md §4.4。
+返回 `{"exit_code":..,"stdout":"..","stderr":".."}`（`detach` 时返回 `{"job": JobInfo}`）。依赖解锁的桌面，见 design.md §6.6。
+
+安全检查：按 Win+R 后先确认屏幕上出现了运行对话框，否则直接返回错误、不输入任何字符（可能原因：会话锁定、登录界面、全屏程序或 UAC 占据焦点、策略禁用了 Win+R）。远端确认已启动后才开始计时；10 秒内未启动会换一种启动方式重试一次。
+
+### job
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| machine | string | |
+| action | `list`\|`status`\|`output`\|`cancel`\|`remove` | |
+| id | string | 任务 id（`list` 以外必填） |
+| max_bytes | int | `output` 时每个流返回末尾多少字节，默认 65536 |
+
+JobInfo：`{id, machine, command, shell, state(running/done/timeout/cancelled/lost), exit_code, pid, started_at, ended_at, elapsed, timeout}`。
+- `cancel`：结束任务的整个进程树（`taskkill /T /F`，经一次 `run_command` 执行，需要解锁的桌面）。
+- `remove`：删除已结束任务的记录和输出文件；每台机器最多保留 50 个任务，超出时自动清理最早已结束的。
+- 任务运行期间该机器不会因空闲被断开；RDP 断开后共享目录失效，任务结果无法回传，状态会变为 `lost`。
+- 任务完成时事件流发出 `job` 事件（`{machine, id, state, exit_code}`）。
 
 ### file
 | 参数 | 类型 | 说明 |

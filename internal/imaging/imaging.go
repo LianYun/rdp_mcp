@@ -163,3 +163,34 @@ func Encode(img image.Image, format string, quality int, maxPNG int) ([]byte, st
 	}
 	return buf.Bytes(), "image/jpeg", nil
 }
+
+// DiffFraction returns the fraction of sampled pixels in r that differ noticeably
+// between a and b (same size images). Every second pixel is sampled.
+func DiffFraction(a, b *image.RGBA, r image.Rectangle) float64 {
+	r = r.Intersect(a.Bounds()).Intersect(b.Bounds())
+	if r.Empty() {
+		return 0
+	}
+	total, diff := 0, 0
+	for y := r.Min.Y; y < r.Max.Y; y += 2 {
+		ia := a.PixOffset(r.Min.X, y)
+		ib := b.PixOffset(r.Min.X, y)
+		for x := r.Min.X; x < r.Max.X; x += 2 {
+			d := absDiff(a.Pix[ia], b.Pix[ib]) + absDiff(a.Pix[ia+1], b.Pix[ib+1]) + absDiff(a.Pix[ia+2], b.Pix[ib+2])
+			if d > 48 {
+				diff++
+			}
+			total++
+			ia += 8
+			ib += 8
+		}
+	}
+	return float64(diff) / float64(total)
+}
+
+func absDiff(x, y uint8) int {
+	if x > y {
+		return int(x - y)
+	}
+	return int(y - x)
+}

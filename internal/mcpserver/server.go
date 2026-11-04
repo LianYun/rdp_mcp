@@ -57,8 +57,11 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "Read (get) or write (set) the remote clipboard text."},
 		wrap(s, "clipboard", s.clipboard))
 	mcp.AddTool(srv, &mcp.Tool{Name: "run_command",
-		Description: "Run a PowerShell (default) or cmd command on the remote machine and return exit_code, stdout and stderr. Works by typing into the Run dialog, so the desktop must be unlocked and not blocked by a modal dialog."},
+		Description: "Run a PowerShell (default) or cmd command on the remote machine and return exit_code, stdout and stderr. Works by typing into the Run dialog, so the desktop must be unlocked and not blocked by a modal dialog (the tool checks that the Run dialog opened before typing). For long-running commands pass detach: true to get a job id immediately and follow it with the job tool."},
 		wrap(s, "run_command", s.runCommand))
+	mcp.AddTool(srv, &mcp.Tool{Name: "job",
+		Description: "Manage commands started with run_command detach:true: list, status, output (tail of stdout/stderr), cancel (kills the process tree), remove (forget a finished job)."},
+		wrap(s, "job", s.jobTool))
 	mcp.AddTool(srv, &mcp.Tool{Name: "file",
 		Description: "Transfer files: upload (local_path or content -> remote_path), download (remote_path -> local_path, or return text content if local_path is empty), list (remote directory). local_path refers to the machine running this MCP server."},
 		wrap(s, "file", s.file))
@@ -420,7 +423,8 @@ type runIn struct {
 	Machine string `json:"machine" jsonschema:"machine name"`
 	Command string `json:"command" jsonschema:"command or script body"`
 	Shell   string `json:"shell,omitempty" jsonschema:"powershell (default) | cmd"`
-	Timeout int    `json:"timeout,omitempty" jsonschema:"timeout in seconds (default 60)"`
+	Timeout int    `json:"timeout,omitempty" jsonschema:"timeout in seconds (default 60; with detach default 3600)"`
+	Detach  bool   `json:"detach,omitempty" jsonschema:"start in the background and return a job id immediately"`
 }
 
 func (s *Server) runCommand(ctx context.Context, in runIn) (*mcp.CallToolResult, error) {
@@ -433,8 +437,19 @@ func (s *Server) runCommand(ctx context.Context, in runIn) (*mcp.CallToolResult,
 	}
 	var res *mcp.CallToolResult
 	err = sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
+		if in.Detach {
+			j, err := remote.Detach(o, in.Command, in.Shell, time.Duration(in.Timeout)*time.Second)
+			if err != nil {
+				return err
+			}
+			res = textResult(map[string]any{"job": j, "hint": "use the job tool (status/output/cancel) with this id"})
+			return nil
+		}
 		r, err := remote.RunCommand(o, in.Command, in.Shell, time.Duration(in.Timeout)*time.Second)
 		if err != nil {
+			if errors.Is(err, remote.ErrRunDialog) {
+				return err
+			}
 			if shot, serr := o.Screenshot(session.ShotOptions{}); serr == nil {
 				res = &mcp.CallToolResult{IsError: true, Content: shotContent(shot, "Error: "+err.Error()+"\nCurrent screen:")}
 				return nil
@@ -446,6 +461,59 @@ func (s *Server) runCommand(ctx context.Context, in runIn) (*mcp.CallToolResult,
 		return nil
 	})
 	return res, err
+}
+
+// ---- job ----
+
+type jobIn struct {
+	Machine  string `json:"machine" jsonschema:"machine name"`
+	Action   string `json:"action" jsonschema:"list | status | output | cancel | remove"`
+	ID       string `json:"id,omitempty" jsonschema:"job id (all actions except list)"`
+	MaxBytes int    `json:"max_bytes,omitempty" jsonschema:"output: bytes of the tail of each stream to return (default 65536)"`
+}
+
+func (s *Server) jobTool(ctx context.Context, in jobIn) (*mcp.CallToolResult, error) {
+	sess, err := s.get(in.Machine)
+	if err != nil {
+		return nil, err
+	}
+	action := strings.ToLower(in.Action)
+	if action != "list" && in.ID == "" {
+		return nil, errors.New("id is required")
+	}
+	switch action {
+	case "list":
+		return textResult(remote.JobList(sess.Name())), nil
+	case "status":
+		j, err := remote.JobStatus(sess.Name(), in.ID)
+		if err != nil {
+			return nil, err
+		}
+		return textResult(j), nil
+	case "output":
+		j, err := remote.JobOutputTail(sess.Name(), in.ID, in.MaxBytes)
+		if err != nil {
+			return nil, err
+		}
+		return textResult(j), nil
+	case "remove":
+		if err := remote.JobRemove(sess.Name(), in.ID); err != nil {
+			return nil, err
+		}
+		return textResult("ok: removed"), nil
+	case "cancel":
+		var res *mcp.CallToolResult
+		err := sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
+			j, err := remote.JobCancel(o, in.ID)
+			if err != nil {
+				return err
+			}
+			res = textResult(j)
+			return nil
+		})
+		return res, err
+	}
+	return nil, fmt.Errorf("unknown action %q", in.Action)
 }
 
 // ---- file ----
