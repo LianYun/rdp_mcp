@@ -25,19 +25,19 @@
 | max_width | int | 否 | 覆盖默认缩放长边 |
 | format | `png`\|`jpeg` | 否 | 默认 png |
 
-返回：图片 + 文本 `{"width":..,"height":..,"scale":..,"screen":[w,h]}`。
+返回：文本说明（图片尺寸、真实分辨率、缩放比例、光标位置）+ 图片。png 超过 3MB 自动改用 jpeg。传入 `max_width` 会改变后续动作的坐标系。
 
 ### mouse
 | 参数 | 类型 | 说明 |
 |---|---|---|
 | machine | string | |
-| action | enum | `move` `click` `double_click` `right_click` `middle_click` `down` `up` `drag` `scroll` |
+| action | enum | `move` `click` `double_click` `triple_click` `right_click` `middle_click` `down` `up` `drag` `scroll` |
 | x, y | int | 目标坐标（`scroll` 时为滚动位置，可省略=当前位置） |
 | button | `left`\|`right`\|`middle`\|`x1`\|`x2` | `click/down/up` 时可用，默认 left |
 | to_x, to_y | int | `drag` 终点 |
 | direction | `up`\|`down`\|`left`\|`right` | `scroll` 方向 |
 | amount | int | `scroll` 格数，默认 3 |
-| modifiers | string[] | 点击时按住的修饰键，如 `["ctrl"]` |
+| modifiers | string[] | 点击/拖拽时按住的修饰键，如 `["ctrl"]` |
 | screenshot_after | bool | 默认 true |
 
 ### keyboard
@@ -74,8 +74,12 @@
 |---|---|---|
 | machine | string | |
 | action | `upload`\|`download`\|`list` | |
-| local_path | string | 本机路径 |
-| remote_path | string | Windows 路径 |
+| local_path | string | MCP 服务所在机器的路径；download 时为空则直接返回文本内容（≤1MB） |
+| remote_path | string | Windows 路径（upload 目标可以是目录） |
+| content | string | upload 时代替 local_path 直接上传文本 |
+| timeout | int（秒） | 默认 120 |
+
+`file` 基于 `run_command` 实现，同样要求桌面已解锁；暂不支持目录下载。
 
 ### session
 | 参数 | 类型 | 说明 |
@@ -89,5 +93,6 @@
 |---|---|---|
 | machine | string | |
 | seconds | number | 固定等待 |
-| until_stable | bool | 等到屏幕在 `stable_ms`（默认 500ms）内无变化，`seconds` 作为上限 |
+| until_stable | bool | 等到屏幕在 `stable_ms`（默认 500ms）内无变化，`seconds` 作为上限（默认 10） |
+| stable_ms | int | 稳定判定时长 |
 | screenshot_after | bool | 默认 true |

@@ -6,12 +6,12 @@
 
 | 里程碑 | 内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| M1 | worker：连接、GDI 内存帧缓冲、指针跟踪、鼠标/键盘/Unicode 输入、IPC | 测试程序可连接 Windows、截图保存、点击与输入生效 | ⬜ |
-| M2 | Go 服务：配置加载、运行时文件/单实例、worker 监管、MCP HTTP；工具 `list_machines` `screenshot` `mouse` `keyboard` `session` | Claude Code 注册后能操作一台机器 | ⬜ |
-| M3 | 多机器、按机器加锁、自动重连、证书 TOFU、空闲断开、控制模式 | 同时稳定控制多台；暂停后模型调用被拒绝 | ⬜ |
-| M4 | 剪贴板、动态分辨率、`wait` 屏幕稳定检测、光标合成 | | ⬜ |
-| M5 | drive 映射；`file`、`run_command` | 远程执行命令、上传下载文件 | ⬜ |
-| M6 | 管理 API（REST + SSE + 实时画面 WS）、事件总线、审计日志、配置写回与热加载、钥匙串 | 用 curl/websocat 完成全部管理操作 | ⬜ |
+| M1 | worker：连接、GDI 内存帧缓冲、指针跟踪、鼠标/键盘/Unicode 输入、IPC | 测试程序可连接 Windows、截图保存、点击与输入生效 | ✅ 已在 FreeRDP 示例服务器上验证 |
+| M2 | Go 服务：配置加载、运行时文件/单实例、worker 监管、MCP HTTP；工具 `list_machines` `screenshot` `mouse` `keyboard` `session` | Claude Code 注册后能操作一台机器 | ✅ |
+| M3 | 多机器、按机器加锁、自动重连、证书 TOFU、空闲断开、控制模式 | 同时稳定控制多台；暂停后模型调用被拒绝 | ✅ |
+| M4 | 剪贴板、动态分辨率、`wait` 屏幕稳定检测、光标合成 | | 🟡 已实现，待真实 Windows 验证剪贴板与分辨率 |
+| M5 | drive 映射；`file`、`run_command` | 远程执行命令、上传下载文件 | 🟡 已实现，待真实 Windows 验证 |
+| M6 | 管理 API（REST + SSE + 实时画面 WS）、事件总线、审计日志、配置写回与热加载、钥匙串 | 用 curl/websocat 完成全部管理操作 | 🟡 已实现：服务信息/关闭、机器列表与会话操作、控制模式、紧急停止、截图、证书重置、SSE、审计查询、钥匙串（CLI）、配置热加载；未实现：机器增删改、配置写回、实时画面 WS |
 
 ## 桌面 UI
 
@@ -26,7 +26,7 @@
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
-| R1 | Makefile、CI（lint/test/build）、Docker 镜像、launchd/systemd 安装 | ⬜ |
+| R1 | Makefile、CI（lint/test/build）、Docker 镜像、launchd/systemd 安装 | 🟡 Makefile 已有 |
 | R2 | macOS dylib 打包、签名公证；Linux AppImage/deb；GitHub Release | ⬜ |
 
 建议顺序：M1 → M2 → M3 → M6（管理 API 基础部分）→ U1 → U2 → M4 → U3 → M5 → U4 → R1 → R2。

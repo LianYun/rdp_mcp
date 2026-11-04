@@ -3,34 +3,37 @@
 - 前缀：`/api/v1`，与 MCP 的 `/mcp` 同一 HTTP 服务。
 - 认证：`Authorization: Bearer <admin_token>`；WebSocket / SSE 可用 `?token=`。`admin_token` 来自配置或 `~/.rdp_mcp/run/service.json`。
 - 格式：JSON；错误统一为 `{"error": {"code": "...", "message": "..."}}`，HTTP 状态码表达类别。
-- CORS：仅允许 Tauri 源与 `server.cors_origins` 配置的源。
+- CORS：仅允许 Tauri 源、本地开发源（`http://localhost:*`）与 `server.cors_origins` 配置的源。
+
+> 实现状态（v0.3）：标 ✅ 的接口已实现，其余随 UI 里程碑（U1–U4）实现。
 
 ## 服务
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/health` | `{status, version, uptime_s}`；不需要 token |
-| GET | `/service` | 服务信息：版本、pid、监听地址、配置文件路径、MCP 地址、数据目录、运行方式（cli/ui-sidecar/launchd/systemd） |
-| POST | `/service/shutdown` | 优雅退出 |
-| GET | `/service/mcp-token` | 返回 MCP token（用于 UI 生成客户端接入片段） |
+| GET | `/health` | ✅ `{status, version, uptime_s}`；不需要 token |
+| GET | `/service` | ✅ 服务信息：版本、pid、监听地址、配置文件路径、MCP 地址、数据目录、运行方式（cli/ui-sidecar/launchd/systemd） |
+| POST | `/service/shutdown` | ✅ 优雅退出 |
+| GET | `/service/mcp-token` | ✅ 返回 MCP token（用于 UI 生成客户端接入片段） |
 | POST | `/service/mcp-token/rotate` | 重新生成 MCP token 并写回配置 |
 
 ## 机器
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/machines` | 列表：配置 + 运行状态（state、control_mode、resolution、last_error、last_activity） |
+| GET | `/machines` | ✅ 列表：配置 + 运行状态（state、control_mode、resolution、last_error、last_activity） |
 | POST | `/machines` | 新增（body 同配置字段，可带 `password`，服务转存钥匙串） |
-| GET | `/machines/{name}` | 详情 |
+| GET | `/machines/{name}` | ✅ 详情 |
 | PUT | `/machines/{name}` | 修改（改名用 `new_name`） |
 | DELETE | `/machines/{name}` | 删除（同时断开会话、可选删除钥匙串条目） |
 | PUT | `/machines/{name}/secret` | `{password}` 写入钥匙串，配置改为 `password: keychain:<name>` |
 | POST | `/machines/{name}/test` | 用给定或已保存参数试连接，返回成功与否 + 截图（base64 JPEG） |
-| POST | `/machines/{name}/connect` · `/disconnect` · `/reconnect` | 会话操作 |
-| PUT | `/machines/{name}/control` | `{mode: agent\|human\|paused}` |
-| POST | `/control/emergency-stop` | 全部机器进入 `paused` |
-| GET | `/machines/{name}/screenshot?max_width=&format=` | 单张截图（图片二进制） |
+| POST | `/machines/{name}/connect` · `/disconnect` · `/reconnect` | ✅ 会话操作 |
+| PUT | `/machines/{name}/control` | ✅ `{mode: agent\|human\|paused}` |
+| POST | `/control/emergency-stop` | ✅ 全部机器进入 `paused` |
+| GET | `/machines/{name}/screenshot?max_width=&format=` | ✅ 单张截图（图片二进制） |
 | POST | `/machines/{name}/cert` | `{accept: once\|always\|reject}` 回应证书确认 |
+| POST | `/machines/{name}/trust` ✅ | 忘记已记录的证书指纹，下次连接重新信任（同 `rdp-mcp trust`） |
 
 ## 配置
 
@@ -42,7 +45,7 @@
 
 ## 事件流（SSE）
 
-`GET /events` → `text/event-stream`，事件名即类型：
+`GET /events` ✅ → `text/event-stream`，事件名即类型：
 
 ```
 event: machine_state
@@ -72,6 +75,6 @@ data: {"id":"tc_123","machine":"dev-pc","tool":"mouse","phase":"end","args":{...
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/audit?machine=&tool=&since=&limit=` | 工具调用记录 |
+| GET | `/audit?machine=&tool=&limit=` ✅ | 工具调用记录（最新在前） |
 | GET | `/audit/thumbs/{id}.jpg` | 缩略图 |
 | GET | `/logs?level=&since=` | 服务日志 |
