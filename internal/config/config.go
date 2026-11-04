@@ -1,4 +1,4 @@
-// Package config loads and validates .rdp_mcp/configs.yaml. See docs/configuration.md.
+// Package config loads and validates .remoter/configs.yaml. See docs/configuration.md.
 package config
 
 import (
@@ -20,8 +20,8 @@ import (
 const (
 	DefaultListen   = "127.0.0.1:8765"
 	FileName        = "configs.yaml"
-	DirName         = ".rdp_mcp"
-	KeychainService = "rdp_mcp"
+	DirName         = ".remoter"
+	KeychainService = "remoter"
 )
 
 // Duration accepts "30m", "1h", "0".
@@ -321,7 +321,7 @@ func isLoopback(addr string) bool {
 	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
-// Find returns the config path to use: explicit, ./.rdp_mcp/configs.yaml, ~/.rdp_mcp/configs.yaml.
+// Find returns the config path to use: explicit, ./.remoter/configs.yaml, ~/.remoter/configs.yaml.
 func Find(explicit string) string {
 	if explicit != "" {
 		return ExpandHome(explicit)

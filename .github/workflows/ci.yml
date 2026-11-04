@@ -35,7 +35,7 @@ jobs:
         run: make all
       - uses: actions/upload-artifact@v4
         with:
-          name: rdp-mcp-${{ runner.os }}
+          name: remoter-mcp-${{ runner.os }}
           path: build/bin/
 
   docker:
@@ -43,6 +43,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t rdp-mcp:ci -f packaging/Dockerfile .
+        run: docker build -t remoter-mcp:ci -f packaging/Dockerfile .
       - name: Smoke test
-        run: docker run --rm --entrypoint rdp-mcp rdp-mcp:ci version
+        run: docker run --rm --entrypoint remoter-mcp remoter-mcp:ci version

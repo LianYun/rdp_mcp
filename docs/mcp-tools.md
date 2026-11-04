@@ -30,7 +30,7 @@
 返回：文本说明（图片尺寸、真实分辨率、缩放比例、光标位置）+ 图片。png 超过 3MB 自动改用 jpeg。传入 `max_width` 会改变后续动作的坐标系。
 
 OCR 说明（design.md D16）：
-- 在运行 rdp-mcp 的机器上用 tesseract 识别，Windows 端无需任何东西，锁屏或任何应用都可用。
+- 在运行 remoter-mcp 的机器上用 tesseract 识别，Windows 端无需任何东西，锁屏或任何应用都可用。
 - 对原始分辨率像素识别（再放大 2 倍提高小字准确率），坐标换算回截图坐标；region 放大时只识别该区域。
 - 返回 `{"languages": "...", "lines": [{"text","x","y","w","h","center":[cx,cy],"conf"}]}`，按从上到下、从左到右排序；中文词之间不加空格。
 - 语言默认自动选择：装了中文语言包时为 `chi_sim+eng`，否则 `eng`；可用 `server.ocr.languages` 指定。未安装 tesseract 时返回安装提示，截图本身照常返回。

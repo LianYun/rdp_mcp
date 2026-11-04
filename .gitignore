@@ -1,5 +1,5 @@
 # 本地配置（可能含密码）
-.rdp_mcp/
+.remoter/
 
 # 构建产物
 /build/

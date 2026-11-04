@@ -32,7 +32,7 @@ type Runtime struct {
 func RunDir(dataDir string) string { return filepath.Join(dataDir, "run") }
 
 // ErrAlreadyRunning is returned by Acquire when another instance holds the lock.
-var ErrAlreadyRunning = errors.New("another rdp-mcp instance is already running")
+var ErrAlreadyRunning = errors.New("another remoter-mcp instance is already running")
 
 // Acquire takes the single-instance lock.
 func Acquire(dataDir string) (*Runtime, error) {
@@ -40,7 +40,7 @@ func Acquire(dataDir string) (*Runtime, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "rdp-mcp.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, "remoter-mcp.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}

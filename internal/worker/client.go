@@ -1,4 +1,4 @@
-// Package worker implements the service side of the rdp-worker IPC protocol (docs/worker-ipc.md).
+// Package worker implements the service side of the remoter-worker IPC protocol (docs/worker-ipc.md).
 package worker
 
 import (
@@ -94,7 +94,7 @@ func Start(ctx context.Context, o StartOptions) (*Client, error) {
 	}
 	sock := filepath.Join(o.SocketDir, fmt.Sprintf("w%d-%d.sock", os.Getpid(), sockSeq.Add(1)))
 	if len(sock) > 100 {
-		sock = filepath.Join(os.TempDir(), fmt.Sprintf("rdp-mcp-w%d-%d.sock", os.Getpid(), sockSeq.Add(1)))
+		sock = filepath.Join(os.TempDir(), fmt.Sprintf("remoter-mcp-w%d-%d.sock", os.Getpid(), sockSeq.Add(1)))
 	}
 	_ = os.Remove(sock)
 	ln, err := net.Listen("unix", sock)

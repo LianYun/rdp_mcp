@@ -9,18 +9,18 @@ worker:
 	cmake -S worker -B build/worker -DCMAKE_BUILD_TYPE=RelWithDebInfo >/dev/null
 	cmake --build build/worker -j
 	@mkdir -p $(BIN)
-	cp build/worker/rdp-worker $(BIN)/rdp-worker
+	cp build/worker/remoter-worker $(BIN)/remoter-worker
 
 service:
 	@mkdir -p $(BIN)
-	go build -ldflags "-X main.version=$(VERSION)" -o $(BIN)/rdp-mcp ./cmd/rdp-mcp
+	go build -ldflags "-X main.version=$(VERSION)" -o $(BIN)/remoter-mcp ./cmd/remoter-mcp
 
 test:
 	go vet ./...
 	go test ./...
 
 run: all
-	$(BIN)/rdp-mcp serve
+	$(BIN)/remoter-mcp serve
 
 clean:
 	rm -rf build

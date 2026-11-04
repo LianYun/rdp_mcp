@@ -416,7 +416,7 @@ func (s *Session) decideCert(host string, port int, fp string) (bool, string) {
 		if known == got {
 			return true, ""
 		}
-		return false, fmt.Sprintf("certificate for %s changed (now %s); if expected, run `rdp-mcp trust %s` or remove the entry from %s",
+		return false, fmt.Sprintf("certificate for %s changed (now %s); if expected, run `remoter-mcp trust %s` or remove the entry from %s",
 			key, fp, s.name, filepath.Join(s.m.opts.DataDir, "known_hosts"))
 	}
 }

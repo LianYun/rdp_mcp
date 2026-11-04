@@ -1,6 +1,6 @@
 # Worker IPC 协议（v1）
 
-主服务（Go，`internal/worker`）与 `rdp-worker`（C，`worker/src`）之间通过 Unix domain socket 通信。主服务创建监听 socket，启动 worker：`rdp-worker --ipc /path/to.sock`，worker 主动连接后立即发送 `hello` 事件。
+主服务（Go，`internal/worker`）与 `remoter-worker`（C，`worker/src`）之间通过 Unix domain socket 通信。主服务创建监听 socket，启动 worker：`remoter-worker --ipc /path/to.sock`，worker 主动连接后立即发送 `hello` 事件。
 
 每次连接（含重连）都启动新的 worker 进程；RDP 断开后 worker 上报 `disconnected` 并退出。
 

@@ -39,7 +39,7 @@ type Engine struct {
 }
 
 // ErrNotInstalled is returned when tesseract cannot be found.
-var ErrNotInstalled = errors.New("OCR needs tesseract on the machine running rdp-mcp " +
+var ErrNotInstalled = errors.New("OCR needs tesseract on the machine running remoter-mcp " +
 	"(macOS: brew install tesseract tesseract-lang; Debian/Ubuntu: apt install tesseract-ocr tesseract-ocr-chi-sim)")
 
 func (e *Engine) init() {

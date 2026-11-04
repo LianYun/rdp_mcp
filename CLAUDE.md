@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-Remoter：基于 FreeRDP 的 Windows 远程控制 MCP 服务：Go 服务（`rdp-mcp`）+ C worker（`rdp-worker`）+ Tauri 桌面应用（`app/`）。
+remoter：基于 FreeRDP 的 Windows 远程控制 MCP 服务：Go 服务（`remoter-mcp`）+ C worker（`remoter-worker`）+ Tauri 桌面应用（`app/`）。
 
-- 命名：产品与桌面应用对外名称为 Remoter；命令行、二进制、Go module、数据目录 `~/.rdp_mcp`、环境变量 `RDP_MCP_*`、钥匙串服务名等技术名称保持 `rdp-mcp` / `rdp_mcp`，不要改（改动会让现有配置和密码失效）。
+- 命名：产品与桌面应用为 `remoter`；服务 / CLI `remoter-mcp`，worker `remoter-worker`，数据目录 `~/.remoter`（项目级 `./.remoter`），环境变量 `REMOTER_MCP_*`，钥匙串服务名 `remoter`。Go module 路径仍为 `github.com/LianYun/rdp_mcp`（随 GitHub 仓库名）。旧名 `rdp_mcp` 只保留在迁移代码中（`internal/config/migrate.go`、`internal/secrets`）。
 - 设计以 `docs/` 为准，开始改动前先读 `docs/design.md`；架构决策变化时先更新文档（§3 决策表与 §14 变更记录），再改代码。
 - 完成里程碑或其中一部分后，更新 `docs/roadmap.md` 的状态。
 - 同步规则：

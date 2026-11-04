@@ -1,8 +1,8 @@
-# Remoter 技术方案
+# remoter 技术方案
 
 > 状态：v0.4（2026-11-04）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
 >
-> 命名：产品与桌面应用名为 **Remoter**（D20）；服务 / CLI / 二进制 / 数据目录等技术名称保持 `rdp-mcp`、`rdp-worker`、`~/.rdp_mcp`。
+> 命名（D20）：产品与桌面应用 `remoter`；服务 / CLI `remoter-mcp`；worker `remoter-worker`；数据目录 `~/.remoter`；环境变量 `REMOTER_MCP_*`。
 >
 > 子文档：[MCP 工具规范](mcp-tools.md) · [管理 API](admin-api.md) · [桌面应用](ui.md) · [配置说明](configuration.md) · [Worker IPC 协议](worker-ipc.md) · [构建与发布](packaging.md) · [路线图](roadmap.md)
 
@@ -17,7 +17,7 @@
 | 功能全面 | 截图、鼠标、键盘、剪贴板、分辨率、命令执行、文件传输、会话管理 |
 | 接口简单 | 约 9 个 MCP 工具，统一 `machine + action` 风格 |
 | HTTP 传输 | MCP Streamable HTTP，端点 `/mcp` |
-| 多机器 | `.rdp_mcp/configs.yaml` 声明，或在 UI 中管理 |
+| 多机器 | `.remoter/configs.yaml` 声明，或在 UI 中管理 |
 | 部署平台 | 服务：macOS、Linux（含无显示器服务器 / Docker）；UI：macOS、Linux 桌面 |
 | 桌面 UI | Tauri 应用：管理机器、启停/重启服务、实时查看与人工接管、查看模型操作记录 |
 | 可独立运行 | 服务不依赖 UI，CLI 即可运行；UI 只是服务的一个管理客户端 |
@@ -67,20 +67,20 @@
 | D17 | 不在 Windows 端常驻代理 | 零常驻、无杀软隔离风险、无需引导时间 | win-rdp-mcp 式常驻 exe（见 comparison-win-rdp-mcp.md） |
 | D18 | 系统 / 窗口 / UIA 能力用预设临时 PowerShell 脚本实现，经 `run_command` 通道执行 | 复用现有零常驻通道；输出由脚本结构化并限制条数，避免撑爆上下文 | 每类一个专用工具（工具数膨胀） |
 | D19 | 长任务通过 `run_command detach` + `job` 工具异步执行 | 复用 jobs 目录的 .out/.err/.code 文件，无需新机制；模型可边跑安装边操作界面 | 同步阻塞直到超时 |
-| D20 | 产品名 **Remoter**，只改对外名称（桌面应用名、bundle id `com.lianyun.remoter`、文档标题、MCP 服务显示名）；技术名称不变 | 不破坏现有配置、钥匙串条目、命令行脚本与 MCP 客户端注册 | 全面改名（需迁移数据目录与钥匙串） |
+| D20 | 全面更名为 **remoter**：应用 `remoter`（bundle id `com.lianyun.remoter`）、`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名 `remoter`；Go module 路径暂不变 | 名称统一；首次启动自动从 `~/.rdp_mcp` 复制配置、`.env`、`known_hosts`，钥匙串回退读取旧服务名，用户无需手动迁移 | 只改对外显示名（技术名与产品名不一致） |
 
 ## 4. 总体架构
 
 ```
  ┌──────────────────────────┐        ┌──────────────────────────────┐
- │  MCP 客户端（模型）         │        │  Remoter 桌面应用（Tauri）     │
+ │  MCP 客户端（模型）         │        │  remoter 桌面应用（Tauri）     │
  │  Claude Code / Desktop … │        │  React UI ── HTTP/SSE/WS ──┐   │
  └────────────┬─────────────┘        │  Rust：进程管理/托盘/自启动   │   │
               │ /mcp  (Bearer mcp_token)  └──────────┬─────────────┘   │
               │                          spawn/stop  │   /api/v1 (Bearer admin_token)
               ▼                                      ▼                 │
  ┌────────────────────────────────────────────────────────────────────▼─┐
- │ rdp-mcp 服务（Go，可独立运行：CLI / launchd / systemd / Docker）          │
+ │ remoter-mcp 服务（Go，可独立运行：CLI / launchd / systemd / Docker）          │
  │  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
  │  │ MCP 层    │ │ 管理 API   │ │ 事件总线  │ │ 配置管理   │ │ 审计/日志  │  │
  │  └────┬─────┘ └─────┬─────┘ └────┬─────┘ └────┬─────┘ └───────────┘  │
@@ -92,7 +92,7 @@
  └─────────────┼──────────────┼──────────────┼───────────────────────────┘
                │ unix socket IPC（JSON + 二进制帧）
          ┌─────▼────┐   ┌─────▼────┐   ┌─────▼────┐
-         │rdp-worker│   │rdp-worker│ … │rdp-worker│   C + libfreerdp，GDI 内存渲染
+         │remoter-worker│   │remoter-worker│ … │remoter-worker│   C + libfreerdp，GDI 内存渲染
          └─────┬────┘   └─────┬────┘   └─────┬────┘
                │ RDP          │              │
             Win-PC-1       Win-PC-2      Win-Server
@@ -102,15 +102,15 @@
 
 | 产物 | 语言 | 说明 |
 |---|---|---|
-| `rdp-mcp` | Go | 服务 + CLI |
-| `rdp-worker` | C | 单机器 RDP 会话进程，由服务拉起 |
-| Remoter 桌面应用 | Tauri（Rust + React） | 桌面管理应用，内置前两者作为 sidecar |
+| `remoter-mcp` | Go | 服务 + CLI |
+| `remoter-worker` | C | 单机器 RDP 会话进程，由服务拉起 |
+| remoter 桌面应用 | Tauri（Rust + React） | 桌面管理应用，内置前两者作为 sidecar |
 
-## 5. rdp-worker（C）
+## 5. remoter-worker（C）
 
 基于 `client/Sample/tf_freerdp.c` 改写，单线程事件循环。
 
-1. **启动**：`rdp-worker --ipc <socket>`，连接参数（含密码）通过 IPC `connect` 下发，不出现在进程参数中。
+1. **启动**：`remoter-worker --ipc <socket>`，连接参数（含密码）通过 IPC `connect` 下发，不出现在进程参数中。
 2. **连接**：设置主机、端口、账号、分辨率、安全协议、`ColorDepth=32`；`gdi_init(BGRA32)`；按配置加载 `cliprdr`、`disp`、`rdpdr+drive`、可选 `rail`。
 3. **证书**：`VerifyCertificateEx/VerifyChangedCertificateEx` 转成 IPC 事件，阻塞等服务回复。
 4. **事件循环**：`freerdp_get_event_handles` 与 IPC socket 一起等待，所有 FreeRDP 调用在同一线程。
@@ -123,13 +123,13 @@
 
 代码规模预估 1500–2500 行。协议见 [worker-ipc.md](worker-ipc.md)。
 
-## 6. rdp-mcp 服务（Go）
+## 6. remoter-mcp 服务（Go）
 
 ### 6.1 包结构
 
 | 包 | 职责 |
 |---|---|
-| `cmd/rdp-mcp` | CLI 入口 |
+| `cmd/remoter-mcp` | CLI 入口 |
 | `internal/config` | YAML 加载/校验/保存（保留注释，`yaml.v3` Node API）、`${ENV}`、`password_cmd`、`keychain:`、文件监听热加载 |
 | `internal/secrets` | 钥匙串读写（`zalando/go-keyring`：macOS Keychain、Linux Secret Service） |
 | `internal/session` | Session 状态机、worker 进程监管、IPC 客户端、控制锁、重连、空闲回收 |
@@ -146,14 +146,14 @@
 ### 6.2 CLI
 
 ```
-rdp-mcp serve   [--config PATH] [--listen ADDR] [--worker PATH] [--log-level L]
-rdp-mcp status                 # 读运行时文件并请求 /api/v1/health
-rdp-mcp stop                   # 通过管理 API 优雅退出
-rdp-mcp check-config [--config PATH]
-rdp-mcp machine test <name>    # 测试连接并保存一张截图
-rdp-mcp secret set <name>      # 交互输入密码写入钥匙串
-rdp-mcp trust <name>           # 忘记已记录的证书指纹，下次连接重新信任
-rdp-mcp version
+remoter-mcp serve   [--config PATH] [--listen ADDR] [--worker PATH] [--log-level L]
+remoter-mcp status                 # 读运行时文件并请求 /api/v1/health
+remoter-mcp stop                   # 通过管理 API 优雅退出
+remoter-mcp check-config [--config PATH]
+remoter-mcp machine test <name>    # 测试连接并保存一张截图
+remoter-mcp secret set <name>      # 交互输入密码写入钥匙串
+remoter-mcp trust <name>           # 忘记已记录的证书指纹，下次连接重新信任
+remoter-mcp version
 ```
 
 已实现（v0.4）：`serve`、`status`、`stop`、`check-config`（含密码可解析性检查）、`secret set|delete`、`trust`、`version`。
@@ -162,25 +162,25 @@ rdp-mcp version
 开发辅助：
 - `go run ./tools/smoke -url ... -machine <name> [-input] [-run "hostname"] [-call <tool> -args '<json>']`：最小 MCP 客户端，用于冒烟测试。
 - `go run ./tools/wsprobe -url ... -token <admin> -machine <name>`：实时画面 WebSocket 探针。
-- `internal/testutil/fakeworker`：测试二进制扮演 rdp-worker（模拟桌面与运行对话框），用于会话 / MCP 工具 / run_command 的自动化测试。
+- `internal/testutil/fakeworker`：测试二进制扮演 remoter-worker（模拟桌面与运行对话框），用于会话 / MCP 工具 / run_command 的自动化测试。
 
 ### 6.3 运行时与单实例
 
-- 数据目录 `~/.rdp_mcp/`（可配）：
+- 数据目录 `~/.remoter/`（可配）：
 
   ```
-  ~/.rdp_mcp/
-    configs.yaml        # 用户级配置（项目级为 ./.rdp_mcp/configs.yaml）
+  ~/.remoter/
+    configs.yaml        # 用户级配置（项目级为 ./.remoter/configs.yaml）
     known_hosts         # 证书指纹（TOFU）
     run/
-      rdp-mcp.lock      # 单实例 flock
+      remoter-mcp.lock      # 单实例 flock
       service.json      # {pid, listen, admin_token, version, started_at, config_path}，权限 0600
       ipc/              # worker socket
     shares/<machine>/   # drive 映射目录
     logs/  audit/
   ```
 
-- 启动时获取 `rdp-mcp.lock`，失败则报告已有实例（打印其 `service.json`）。
+- 启动时获取 `remoter-mcp.lock`，失败则报告已有实例（打印其 `service.json`）。
 - `admin_token`：配置中未指定时每次启动随机生成，写入 `service.json`；UI 与 CLI 读该文件获得管理权限（文件权限即授权边界）。
 - 收到 SIGTERM / `POST /api/v1/service/shutdown`：停止接收新请求 → 断开所有会话 → 结束 worker → 删除 `service.json`。
 
@@ -215,7 +215,7 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 
 ### 6.6 run_command / file
 
-1. 本地 `~/.rdp_mcp/shares/<machine>/` 经 drive 通道映射为 `\\tsclient\mcp`。
+1. 本地 `~/.remoter/shares/<machine>/` 经 drive 通道映射为 `\\tsclient\mcp`。
 2. `run_command`：生成 `jobs/<id>.user.ps1`（用户命令）与 `jobs/<id>.ps1`（runner）→ 截图后按 `Win+R`，比较前后画面确认运行对话框已出现（否则不输入任何内容并报错）→ 输入 `conhost.exe --headless powershell … -File \\tsclient\mcp\jobs\<id>.ps1`（无控制台窗口）回车 → 等待 runner 写出 `.started`（10 秒未出现则改用 `powershell -WindowStyle Hidden` 重试；runner 以独占方式创建 `.started`，保证不会执行两次；每台机器记住可用的启动方式）→ runner 记录 `.pid`，用户命令的输出写到 `.out|.err`，退出码写到 `.code` → 服务轮询 `.code` 或超时 → 返回并清理。
    - `detach: true`：启动确认后立即返回任务 id；后台 goroutine 每秒检查 `.code`，完成时发 `job` 事件；运行期间暂停空闲断开。`job cancel` 用 `taskkill /PID <pid> /T /F` 结束进程树。
 3. `file upload/download`：经共享目录中转 + `Copy-Item`。
@@ -295,16 +295,16 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 ## 13. 仓库结构
 
 ```
-rdp_mcp/
+remoter/
   docs/                    # 设计文档
   worker/                  # C，CMake，链接 FreeRDP
     src/  tests/  CMakeLists.txt
-  cmd/rdp-mcp/             # Go 入口（go.mod 在仓库根）
+  cmd/remoter-mcp/             # Go 入口（go.mod 在仓库根）
   internal/                # Go 各包（§6.1）
   app/                     # Tauri 桌面应用
     src/                   # React 前端
     src-tauri/             # Rust：sidecar/托盘/自启动
-      binaries/            # 构建时放入 rdp-mcp-<triple>、rdp-worker-<triple>
+      binaries/            # 构建时放入 remoter-mcp-<triple>、remoter-worker-<triple>
   examples/                # 配置示例
   packaging/               # Dockerfile、依赖打包脚本
   scripts/
@@ -319,8 +319,8 @@ rdp_mcp/
 |---|---|---|
 | 2026-11-04 | v0.1 | 初版设计 |
 | 2026-11-04 | v0.2 | 加入 Tauri 桌面 UI；服务独立运行与运行时文件；管理 API；控制模式与人工接管；钥匙串密码；光标合成；配置热加载；可观测性、测试策略、打包方案 |
-| 2026-11-04 | v0.5 | 桌面 UI（U1–U4）首版：Tauri 2 + React；Rust 侧只做服务发现/启停（sidecar 用标准库 `Command` + `setsid` 启动，因此不使用 `shell` 插件）、托盘、单实例、开机自启、关闭到托盘；前端也可在浏览器里运行（Playwright 端到端测试用）；`RDP_MCP_DATA_DIR` 覆盖数据目录用于测试/多实例。macOS 打包：`scripts/bundle-macos-libs.py` 把 FreeRDP 及其依赖放进 `Contents/Frameworks` 并改写 install name，产出未签名 .dmg |
+| 2026-11-04 | v0.5 | 桌面 UI（U1–U4）首版：Tauri 2 + React；Rust 侧只做服务发现/启停（sidecar 用标准库 `Command` + `setsid` 启动，因此不使用 `shell` 插件）、托盘、单实例、开机自启、关闭到托盘；前端也可在浏览器里运行（Playwright 端到端测试用）；`REMOTER_MCP_DATA_DIR` 覆盖数据目录用于测试/多实例。macOS 打包：`scripts/bundle-macos-libs.py` 把 FreeRDP 及其依赖放进 `Contents/Frameworks` 并改写 install name，产出未签名 .dmg |
 | 2026-11-04 | v0.4 | 管理 API 全部实现（M6）；`run_command` 先确认运行对话框出现再输入、`conhost --headless` 无窗口启动并带回退（M8）；`run_command detach` + `job` 工具（D19）；服务端 OCR（D16，`screenshot ocr`）；`file search` / `append`；fakeworker 自动化测试；CI 工作流与 Dockerfile。决定不做：`system` / `inspect` 工具、`session lock`、`service install` |
-| 2026-11-04 | v0.4.1 | 产品更名为 Remoter（D20）：桌面应用名与 bundle id、文档标题、MCP 服务显示名；技术名称不变 |
+| 2026-11-04 | v0.4.1 | 全面更名为 remoter（D20）：`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名；从 `~/.rdp_mcp` 自动迁移配置；旧钥匙串条目可读 |
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
-| 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `rdp-mcp trust` 命令 |
+| 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `remoter-mcp trust` 命令 |

@@ -5,7 +5,7 @@
 
 ## 1. 架构差异
 
-| | win-rdp-mcp | rdp_mcp（本项目） |
+| | win-rdp-mcp | remoter（本项目） |
 |---|---|---|
 | 控制端 | Linux：`xfreerdp` + Xvfb + xdotool + ImageMagick；macOS 需 Docker | C worker 链接 libfreerdp，内存渲染；macOS / Linux 原生 |
 | Windows 端 | 经 `\\tsclient\mcp` 拷入并常驻 `win-rdp-mcp.exe`，通过目录里的 req/resp JSON 文件做 RPC；首次启动约 40 秒，可能被 Defender 隔离 | 不留常驻程序：每次 `run_command` 写一个临时 PowerShell 脚本到 `\\tsclient\mcp`，经 Win+R 执行 |

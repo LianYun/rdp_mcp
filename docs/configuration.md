@@ -2,7 +2,7 @@
 
 ## 快速开始
 
-创建 `~/.rdp_mcp/configs.yaml`（全局）或在项目目录下创建 `./.rdp_mcp/configs.yaml`，最小配置：
+创建 `~/.remoter/configs.yaml`（全局）或在项目目录下创建 `./.remoter/configs.yaml`，最小配置：
 
 ```yaml
 machines:
@@ -13,13 +13,13 @@ machines:
     password: ${WIN1_PASSWORD} # 推荐引用环境变量或钥匙串，见下文
 ```
 
-然后运行 `rdp-mcp check-config` 检查，`rdp-mcp serve` 启动。
+然后运行 `remoter-mcp check-config` 检查，`remoter-mcp serve` 启动。
 
 ## 查找顺序
 
 1. 命令行 `--config <path>`
-2. 当前目录 `./.rdp_mcp/configs.yaml`
-3. 用户目录 `~/.rdp_mcp/configs.yaml`（文件不存在时服务以空机器列表启动）
+2. 当前目录 `./.remoter/configs.yaml`
+3. 用户目录 `~/.remoter/configs.yaml`（文件不存在时服务以空机器列表启动）
 
 服务每 2 秒检查一次配置文件，修改后自动热加载；校验失败时保留旧配置并记录错误。桌面 UI 通过管理 API 修改配置时由服务写回文件，保留注释与键顺序。`server.listen`、`server.data_dir` 修改后需重启服务。
 
@@ -29,7 +29,7 @@ machines:
 
 | 写法 | 示例 | 说明 |
 |---|---|---|
-| 系统钥匙串（推荐） | `password: keychain:win1` | 先执行 `rdp-mcp secret set win1` 输入密码；macOS 用 Keychain，Linux 用 Secret Service |
+| 系统钥匙串（推荐） | `password: keychain:win1` | 先执行 `remoter-mcp secret set win1` 输入密码；macOS 用 Keychain，Linux 用 Secret Service |
 | 环境变量 | `password: ${WIN1_PASSWORD}` | 在环境中 `export`，或写入 `.env` 文件（见下） |
 | 命令 | `password_cmd: "pass show rdp/win1"` | 执行命令，取标准输出作为密码 |
 | 明文（不推荐） | `password: P@ssw0rd` | `check-config` 会警告 |
@@ -38,7 +38,7 @@ machines:
 
 ### .env 文件
 
-服务启动时依次读取配置文件同目录的 `.env` 和 `data_dir` 下的 `.env`（通常都是 `~/.rdp_mcp/.env`），格式 `KEY=VALUE`（支持 `#` 注释、`export ` 前缀和引号）。进程环境里已有的同名变量优先。修改 `.env` 后需重启服务。文件权限过宽时会警告，建议 `chmod 600 ~/.rdp_mcp/.env`。
+服务启动时依次读取配置文件同目录的 `.env` 和 `data_dir` 下的 `.env`（通常都是 `~/.remoter/.env`），格式 `KEY=VALUE`（支持 `#` 注释、`export ` 前缀和引号）。进程环境里已有的同名变量优先。修改 `.env` 后需重启服务。文件权限过宽时会警告，建议 `chmod 600 ~/.remoter/.env`。
 
 ## 字段
 
@@ -51,8 +51,8 @@ machines:
 | cors_origins | `[]` | 是 | 除 Tauri 与本地开发服务器外，额外允许访问管理 API 的源 |
 | screenshot_max_width | 1280 | 否 | 截图缩放后的长边像素 |
 | draw_cursor | true | 否 | 截图中合成鼠标指针 |
-| data_dir | `~/.rdp_mcp` | 是 | 运行时文件、共享目录、known_hosts、日志、审计 |
-| worker_path | 自动 | 是 | `rdp-worker` 路径；默认依次查找：与 `rdp-mcp` 同目录、`../worker/build/`、`PATH` |
+| data_dir | `~/.remoter` | 是 | 运行时文件、共享目录、known_hosts、日志、审计 |
+| worker_path | 自动 | 是 | `remoter-worker` 路径；默认依次查找：与 `remoter-mcp` 同目录、`../worker/build/`、`PATH` |
 | log_level | `info` | 否 | `debug`/`info`/`warn`/`error`；`debug` 时 worker 也输出 FreeRDP 调试日志 |
 | audit.enabled | true | 是 | 记录工具调用到 `<data_dir>/audit/YYYY-MM-DD.jsonl` |
 | audit.retention_days | 7 | 是 | 审计日志保留天数 |
@@ -93,18 +93,18 @@ machines:
 ## 证书
 
 - 指纹记录在 `<data_dir>/known_hosts`。
-- Windows 重装或证书更换后连接会被拒绝，错误信息里有新指纹。确认无误后执行 `rdp-mcp trust <machine>`，下次连接重新信任。
+- Windows 重装或证书更换后连接会被拒绝，错误信息里有新指纹。确认无误后执行 `remoter-mcp trust <machine>`，下次连接重新信任。
 
 ## 运行时目录（data_dir）
 
 ```
-~/.rdp_mcp/
+~/.remoter/
   configs.yaml
   known_hosts            # 证书指纹
   run/service.json       # 运行中服务的地址、PID、admin_token（0600）
-  run/rdp-mcp.lock       # 单实例锁
+  run/remoter-mcp.lock       # 单实例锁
   shares/<machine>/      # 映射为远端 \\tsclient\mcp
-  logs/rdp-mcp.log       # 服务日志
+  logs/remoter-mcp.log       # 服务日志
   logs/worker-<machine>.log
   audit/YYYY-MM-DD.jsonl
   freerdp/               # FreeRDP 自身配置目录

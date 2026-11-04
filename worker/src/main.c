@@ -164,7 +164,7 @@ int main(int argc, char* argv[])
 			ipc_path = argv[++i];
 		else if (strcmp(argv[i], "--version") == 0)
 		{
-			printf("rdp-worker 0.1.0 (FreeRDP %s)\n", freerdp_get_version_string());
+			printf("remoter-worker 0.1.0 (FreeRDP %s)\n", freerdp_get_version_string());
 			return 0;
 		}
 	}
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
 	}
 	(void)signal(SIGPIPE, SIG_IGN);
 
-	if (!freerdp_setApplicationDetails("rdp_mcp", "rdp-worker", 3))
+	if (!freerdp_setApplicationDetails("remoter", "remoter-worker", 3))
 		return 1;
 
 	RDP_CLIENT_ENTRY_POINTS ep = { 0 };

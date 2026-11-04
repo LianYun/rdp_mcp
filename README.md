@@ -1,4 +1,4 @@
-# Remoter
+# remoter
 
 基于 [FreeRDP](https://github.com/FreeRDP/FreeRDP) 的 Windows 远程控制 MCP 服务：让大模型通过 MCP（Streamable HTTP）控制多台 Windows 电脑，并提供 Tauri 桌面管理应用。
 
@@ -8,11 +8,11 @@
 
 | 组件 | 说明 |
 |---|---|
-| `rdp-mcp` | Go 服务 + CLI，可独立运行（命令行 / Docker），也可由桌面应用启动 |
-| `rdp-worker` | C + libfreerdp，每台 Windows 一个无界面会话进程 |
-| Remoter（桌面应用） | Tauri 应用：管理机器、启停服务、实时画面与人工接管、操作记录 |
+| `remoter-mcp` | Go 服务 + CLI，可独立运行（命令行 / Docker），也可由桌面应用启动 |
+| `remoter-worker` | C + libfreerdp，每台 Windows 一个无界面会话进程 |
+| remoter（桌面应用） | Tauri 应用：管理机器、启停服务、实时画面与人工接管、操作记录 |
 
-产品名为 Remoter；命令行、二进制、数据目录（`~/.rdp_mcp`）等技术名称保持 `rdp-mcp` / `rdp_mcp` 不变。
+从 rdp_mcp 升级：首次以默认路径启动 `remoter-mcp` 时，会把 `~/.rdp_mcp` 中的 `configs.yaml`、`.env`、`known_hosts` 复制到 `~/.remoter`（旧目录保留）；旧钥匙串条目（服务名 `rdp_mcp`）仍可读取。环境变量已改为 `REMOTER_MCP_*`。
 
 ## 快速开始（macOS / Linux）
 
@@ -24,11 +24,11 @@
    # Debian 13 / Ubuntu 24.04+
    # sudo apt install build-essential cmake pkg-config freerdp3-dev golang tesseract-ocr tesseract-ocr-chi-sim
 
-   make            # 生成 build/bin/rdp-mcp 和 build/bin/rdp-worker
-   make app        # 可选：构建桌面应用 Remoter（需要 Node.js、pnpm、Rust）
+   make            # 生成 build/bin/remoter-mcp 和 build/bin/remoter-worker
+   make app        # 可选：构建桌面应用 remoter（需要 Node.js、pnpm、Rust）
    ```
 
-2. 写配置 `~/.rdp_mcp/configs.yaml`（字段说明见 [docs/configuration.md](docs/configuration.md)），或在桌面应用里添加机器：
+2. 写配置 `~/.remoter/configs.yaml`（字段说明见 [docs/configuration.md](docs/configuration.md)），或在桌面应用里添加机器：
 
    ```yaml
    machines:
@@ -36,14 +36,14 @@
        description: "办公电脑"
        host: 192.168.1.20
        username: alice
-       password: keychain:win1     # 先执行 build/bin/rdp-mcp secret set win1
+       password: keychain:win1     # 先执行 build/bin/remoter-mcp secret set win1
    ```
 
 3. 检查并启动：
 
    ```bash
-   build/bin/rdp-mcp check-config
-   build/bin/rdp-mcp serve          # MCP 端点 http://127.0.0.1:8765/mcp
+   build/bin/remoter-mcp check-config
+   build/bin/remoter-mcp serve          # MCP 端点 http://127.0.0.1:8765/mcp
    ```
 
 4. 接入 MCP 客户端，例如 Claude Code：
@@ -67,7 +67,7 @@ Windows 端要求：专业版/企业版/服务器版，已开启远程桌面。W
 ## CLI
 
 ```
-rdp-mcp serve | status | stop | check-config | secret set|delete <key> | trust <machine> | version
+remoter-mcp serve | status | stop | check-config | secret set|delete <key> | trust <machine> | version
 ```
 
 ## 文档

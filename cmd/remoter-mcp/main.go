@@ -1,4 +1,4 @@
-// Command rdp-mcp is the RDP MCP service and CLI. See docs/design.md §6.2.
+// Command remoter-mcp is the remoter service and CLI. See docs/design.md §6.2.
 package main
 
 import (
@@ -35,19 +35,19 @@ import (
 
 var version = "0.1.0-dev"
 
-const usage = `rdp-mcp - control Windows machines over RDP via MCP
+const usage = `remoter-mcp - control Windows machines over RDP via MCP
 
 Usage:
-  rdp-mcp serve [--config PATH] [--listen ADDR] [--worker PATH] [--log-level LEVEL]
-  rdp-mcp status [--config PATH]
-  rdp-mcp stop [--config PATH]
-  rdp-mcp check-config [--config PATH]
-  rdp-mcp secret set <machine|key>      store a password in the OS keychain
-  rdp-mcp secret delete <machine|key>
-  rdp-mcp trust <machine> [--config PATH]   forget the stored certificate (re-trust on next connect)
-  rdp-mcp version
+  remoter-mcp serve [--config PATH] [--listen ADDR] [--worker PATH] [--log-level LEVEL]
+  remoter-mcp status [--config PATH]
+  remoter-mcp stop [--config PATH]
+  remoter-mcp check-config [--config PATH]
+  remoter-mcp secret set <machine|key>      store a password in the OS keychain
+  remoter-mcp secret delete <machine|key>
+  remoter-mcp trust <machine> [--config PATH]   forget the stored certificate (re-trust on next connect)
+  remoter-mcp version
 
-Config lookup: --config, ./.rdp_mcp/configs.yaml, ~/.rdp_mcp/configs.yaml
+Config lookup: --config, ./.remoter/configs.yaml, ~/.remoter/configs.yaml
 `
 
 func main() {
@@ -71,7 +71,7 @@ func main() {
 	case "trust":
 		err = cmdTrust(args)
 	case "version", "--version", "-v":
-		fmt.Println("rdp-mcp", version)
+		fmt.Println("remoter-mcp", version)
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 	default:
@@ -88,6 +88,16 @@ func main() {
 var dotenvWarnings []string
 
 func loadConfig(path string) (*config.Config, error) {
+	dotenvWarnings = nil
+	if path == "" {
+		// One-time copy of the user's settings from the pre-rename data directory.
+		note, err := config.MigrateLegacyDataDir()
+		if err != nil {
+			dotenvWarnings = append(dotenvWarnings, "legacy data migration failed: "+err.Error())
+		} else if note != "" {
+			dotenvWarnings = append(dotenvWarnings, note)
+		}
+	}
 	p := config.Find(path)
 	cfg, err := config.Load(p)
 	if err != nil {
@@ -95,7 +105,7 @@ func loadConfig(path string) (*config.Config, error) {
 	}
 	// Load .env (next to the config and in data_dir), then re-parse so ${VAR} in server fields resolve.
 	loaded, warnings := config.LoadDotEnv(p, cfg.Server.EffectiveDataDir())
-	dotenvWarnings = warnings
+	dotenvWarnings = append(dotenvWarnings, warnings...)
 	for _, f := range loaded {
 		dotenvWarnings = append(dotenvWarnings, "loaded environment from "+f)
 	}
@@ -125,7 +135,7 @@ func cmdServe(args []string) error {
 	listen := fs.String("listen", "", "override server.listen")
 	workerPath := fs.String("worker", "", "override server.worker_path")
 	logLevel := fs.String("log-level", "", "override server.log_level")
-	managedBy := fs.String("managed-by", envOr("RDP_MCP_MANAGED_BY", "cli"), "cli | ui-sidecar | launchd | systemd")
+	managedBy := fs.String("managed-by", envOr("REMOTER_MCP_MANAGED_BY", "cli"), "cli | ui-sidecar | launchd | systemd")
 	_ = fs.Parse(args)
 
 	cfg, err := loadConfig(*cfgPath)
@@ -150,7 +160,7 @@ func cmdServe(args []string) error {
 	if err := os.MkdirAll(filepath.Join(dataDir, "logs"), 0o700); err != nil {
 		return err
 	}
-	logFile, err := os.OpenFile(filepath.Join(dataDir, "logs", "rdp-mcp.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	logFile, err := os.OpenFile(filepath.Join(dataDir, "logs", "remoter-mcp.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
@@ -236,7 +246,7 @@ func cmdServe(args []string) error {
 		Mgr: mgr, Bus: bus, Audit: al, AdminToken: adminToken, MCPToken: getMCPToken,
 		Origins: cfg.Server.CORSOrigins, Shutdown: stop,
 		Keychain: secrets.Keychain{}, Apply: applyCfg,
-		LogFile: filepath.Join(dataDir, "logs", "rdp-mcp.log"),
+		LogFile: filepath.Join(dataDir, "logs", "remoter-mcp.log"),
 		Info: adminapi.ServiceInfo{
 			Version: version, PID: os.Getpid(), Listen: ln.Addr().String(),
 			MCPURL:     "http://" + ln.Addr().String() + "/mcp",
@@ -253,7 +263,7 @@ func cmdServe(args []string) error {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprintf(w, "rdp-mcp %s\nMCP endpoint: /mcp\nAdmin API: /api/v1\n", version)
+		fmt.Fprintf(w, "remoter-mcp %s\nMCP endpoint: /mcp\nAdmin API: /api/v1\n", version)
 	})
 	httpSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
@@ -269,7 +279,7 @@ func cmdServe(args []string) error {
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
-	log.Info("rdp-mcp started", "version", version, "mcp", "http://"+ln.Addr().String()+"/mcp",
+	log.Info("remoter-mcp started", "version", version, "mcp", "http://"+ln.Addr().String()+"/mcp",
 		"config", cfg.Path, "machines", len(cfg.Machines), "worker", wp, "data_dir", dataDir)
 	bus.Publish("service", map[string]any{"status": "started", "version": version})
 
@@ -295,7 +305,7 @@ func mcpAuth(token func() string, next http.Handler) http.Handler {
 		if t := token(); t != "" {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if subtle.ConstantTimeCompare([]byte(got), []byte(t)) != 1 {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="rdp-mcp"`)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="remoter-mcp"`)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -349,7 +359,7 @@ func watchConfig(ctx context.Context, path, listenOverride, workerOverride strin
 		}
 		old := mgr.Config()
 		if old.Server.EffectiveListen() != cfg.Server.EffectiveListen() || old.Server.DataDir != cfg.Server.DataDir {
-			log.Warn("server.listen/data_dir changed; restart rdp-mcp to apply")
+			log.Warn("server.listen/data_dir changed; restart remoter-mcp to apply")
 		}
 		apply(cfg)
 		log.Info("config reloaded", "machines", len(cfg.Machines))
@@ -385,10 +395,10 @@ func cmdStatus(args []string) error {
 		return err
 	}
 	if !ok {
-		fmt.Println("rdp-mcp is not running")
+		fmt.Println("remoter-mcp is not running")
 		os.Exit(3)
 	}
-	fmt.Printf("rdp-mcp %s running (pid %d, managed by %s, since %s)\nMCP endpoint: http://%s/mcp\nconfig: %s\n",
+	fmt.Printf("remoter-mcp %s running (pid %d, managed by %s, since %s)\nMCP endpoint: http://%s/mcp\nconfig: %s\n",
 		info.Version, info.PID, info.ManagedBy, info.StartedAt.Format(time.RFC3339), info.Listen, info.ConfigPath)
 	req, _ := http.NewRequest("GET", "http://"+info.Listen+"/api/v1/machines", nil)
 	req.Header.Set("Authorization", "Bearer "+info.AdminToken)
@@ -415,7 +425,7 @@ func cmdStop(args []string) error {
 		return err
 	}
 	if !ok {
-		fmt.Println("rdp-mcp is not running")
+		fmt.Println("remoter-mcp is not running")
 		return nil
 	}
 	req, _ := http.NewRequest("POST", "http://"+info.Listen+"/api/v1/service/shutdown", nil)
@@ -477,7 +487,7 @@ func cmdCheckConfig(args []string) error {
 
 func cmdSecret(args []string) error {
 	if len(args) != 2 || (args[0] != "set" && args[0] != "delete") {
-		return errors.New("usage: rdp-mcp secret set|delete <key>")
+		return errors.New("usage: remoter-mcp secret set|delete <key>")
 	}
 	key := args[1]
 	if args[0] == "delete" {
@@ -506,7 +516,7 @@ func cmdTrust(args []string) error {
 	fs := flag.NewFlagSet("trust", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file")
 	if len(args) < 1 {
-		return errors.New("usage: rdp-mcp trust <machine>")
+		return errors.New("usage: remoter-mcp trust <machine>")
 	}
 	name := args[0]
 	_ = fs.Parse(args[1:])

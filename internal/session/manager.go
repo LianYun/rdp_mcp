@@ -236,7 +236,7 @@ func (m *Manager) Shutdown() {
 	m.wg.Wait()
 }
 
-// FindWorker locates the rdp-worker binary.
+// FindWorker locates the remoter-worker binary.
 func FindWorker(configured string) (string, error) {
 	if configured != "" {
 		p := config.ExpandHome(configured)
@@ -249,17 +249,17 @@ func FindWorker(configured string) (string, error) {
 		exe, _ = filepath.EvalSymlinks(exe)
 		dir := filepath.Dir(exe)
 		for _, c := range []string{
-			filepath.Join(dir, "rdp-worker"),
-			filepath.Join(dir, "..", "worker", "build", "rdp-worker"),
-			filepath.Join(dir, "..", "..", "worker", "build", "rdp-worker"),
+			filepath.Join(dir, "remoter-worker"),
+			filepath.Join(dir, "..", "worker", "build", "remoter-worker"),
+			filepath.Join(dir, "..", "..", "worker", "build", "remoter-worker"),
 		} {
 			if st, err := os.Stat(c); err == nil && !st.IsDir() {
 				return filepath.Clean(c), nil
 			}
 		}
 	}
-	if p, err := exec.LookPath("rdp-worker"); err == nil {
+	if p, err := exec.LookPath("remoter-worker"); err == nil {
 		return p, nil
 	}
-	return "", errors.New("rdp-worker not found: build it (make worker) or set server.worker_path")
+	return "", errors.New("remoter-worker not found: build it (make worker) or set server.worker_path")
 }

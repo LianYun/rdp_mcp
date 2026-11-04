@@ -1,4 +1,4 @@
-// Package fakeworker is a stand-in for rdp-worker used by tests. It speaks the IPC
+// Package fakeworker is a stand-in for remoter-worker used by tests. It speaks the IPC
 // protocol (docs/worker-ipc.md) against a simulated 1280x800 desktop and logs every
 // input request as a JSON line to $FAKE_WORKER_LOG.
 //

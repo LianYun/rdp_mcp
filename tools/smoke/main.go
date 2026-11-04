@@ -1,4 +1,4 @@
-// Command smoke is a small MCP client for exercising a running rdp-mcp service.
+// Command smoke is a small MCP client for exercising a running remoter-mcp service.
 //
 //	go run ./tools/smoke -url http://127.0.0.1:8765/mcp -machine dev-pc [-token T] [-out shot.png] [-run "hostname"]
 package main
@@ -44,7 +44,7 @@ func main() {
 	if *token != "" {
 		hc.Transport = bearer{*token, http.DefaultTransport}
 	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "rdp-mcp-smoke", Version: "0.1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "remoter-mcp-smoke", Version: "0.1"}, nil)
 	cs, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: *url, HTTPClient: hc}, nil)
 	if err != nil {
 		log.Fatalf("connect: %v", err)

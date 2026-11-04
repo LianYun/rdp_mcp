@@ -1,4 +1,4 @@
-/* rdp-worker: headless FreeRDP session controlled over a unix socket.
+/* remoter-worker: headless FreeRDP session controlled over a unix socket.
  * See docs/worker-ipc.md for the protocol. */
 #ifndef RDP_WORKER_H
 #define RDP_WORKER_H
@@ -10,7 +10,7 @@
 #include <winpr/json.h>
 #include <winpr/synch.h>
 
-#define TAG "rdp-worker"
+#define TAG "remoter-worker"
 
 typedef struct
 {

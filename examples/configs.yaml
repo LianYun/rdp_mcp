@@ -1,7 +1,7 @@
-# 复制到 ./.rdp_mcp/configs.yaml 或 ~/.rdp_mcp/configs.yaml
+# 复制到 ./.remoter/configs.yaml 或 ~/.remoter/configs.yaml
 server:
   listen: 127.0.0.1:8765        # MCP: /mcp   管理 API: /api/v1
-  mcp_token: ${RDP_MCP_TOKEN}   # 可选；监听非本地地址时必填
+  mcp_token: ${REMOTER_MCP_TOKEN}   # 可选；监听非本地地址时必填
   screenshot_max_width: 1280
   audit:
     enabled: true
@@ -23,7 +23,7 @@ machines:
     description: "开发机，装了 VS 和 Chrome"
     host: 192.168.1.20
     username: alice
-    password: keychain:dev-pc        # rdp-mcp secret set dev-pc
+    password: keychain:dev-pc        # remoter-mcp secret set dev-pc
     domain: CORP
     tags: [dev]
 

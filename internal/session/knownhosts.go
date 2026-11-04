@@ -63,7 +63,7 @@ func (k *KnownHosts) load() (map[string]string, error) {
 
 func (k *KnownHosts) save(m map[string]string) error {
 	var b strings.Builder
-	b.WriteString("# rdp_mcp trusted RDP certificates: host:port sha256-fingerprint\n")
+	b.WriteString("# remoter trusted RDP certificates: host:port sha256-fingerprint\n")
 	for h, fp := range m {
 		fmt.Fprintf(&b, "%s %s\n", h, fp)
 	}
