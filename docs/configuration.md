@@ -21,7 +21,7 @@ machines:
 2. 当前目录 `./.rdp_mcp/configs.yaml`
 3. 用户目录 `~/.rdp_mcp/configs.yaml`（文件不存在时服务以空机器列表启动）
 
-服务每 2 秒检查一次配置文件，修改后自动热加载；校验失败时保留旧配置并记录错误。`server.listen`、`server.data_dir` 修改后需重启服务。
+服务每 2 秒检查一次配置文件，修改后自动热加载；校验失败时保留旧配置并记录错误。桌面 UI 通过管理 API 修改配置时由服务写回文件，保留注释与键顺序。`server.listen`、`server.data_dir` 修改后需重启服务。
 
 配置中出现未知字段会报错（防止拼写错误被静默忽略）。
 
@@ -57,7 +57,10 @@ machines:
 | audit.enabled | true | 是 | 记录工具调用到 `<data_dir>/audit/YYYY-MM-DD.jsonl` |
 | audit.retention_days | 7 | 是 | 审计日志保留天数 |
 | audit.redact_typed_text | false | 是 | 审计中隐藏 `text`/`content`/`command` 参数 |
-| audit.screenshots | true | — | 预留：审计保存截图缩略图（未实现） |
+| audit.screenshots | true | 否 | 为返回截图的工具调用保存缩略图（宽 320）到 `<data_dir>/audit/thumbs/`，供 UI 活动记录显示 |
+| ocr.enabled | true | 否 | 允许 `screenshot` 的 `ocr` 参数 |
+| ocr.tesseract | 自动 | 否 | tesseract 可执行文件路径；默认从 `PATH` 查找（macOS：`brew install tesseract`；Debian：`apt install tesseract-ocr`） |
+| ocr.languages | 自动 | 否 | 识别语言，如 `chi_sim+eng`；默认自动选择：已安装 `chi_sim` 时为 `chi_sim+eng`，否则 `eng`。中文语言包：`brew install tesseract-lang` 或 `apt install tesseract-ocr-chi-sim` |
 
 ### defaults（被每台机器继承，机器上同名字段覆盖）
 | 字段 | 默认 | 说明 |

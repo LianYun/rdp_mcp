@@ -83,7 +83,14 @@ func wrap[In any](s *Server, tool string, h handler[In]) mcp.ToolHandlerFor[In, 
 		if err != nil {
 			res = &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: errorText(err)}}}
 		}
-		s.audit.End(id, tool, machine, in, time.Since(start), res.IsError, summary(res))
+		thumb := ""
+		for _, c := range res.Content {
+			if img, ok := c.(*mcp.ImageContent); ok {
+				thumb = s.audit.SaveThumb(id, img.Data)
+				break
+			}
+		}
+		s.audit.End(id, tool, machine, in, time.Since(start), res.IsError, summary(res), thumb)
 		return res, nil, nil
 	}
 }

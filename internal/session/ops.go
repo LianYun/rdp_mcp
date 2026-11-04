@@ -90,6 +90,8 @@ type ShotOptions struct {
 	DrawCursor *bool
 	// KeepScale keeps the agent coordinate system unchanged (UI/admin captures).
 	KeepScale bool
+	// Quality is the JPEG quality (default 85).
+	Quality int
 }
 
 type Shot struct {
@@ -164,7 +166,7 @@ func (o *Ops) Screenshot(opt ShotOptions) (*Shot, error) {
 		crop := imaging.Crop(img, real)
 		zoom := imaging.Scale(real.Dx(), real.Dy(), maxW) // never upscale beyond native pixels
 		out := imaging.Resize(crop, zoom)
-		data, mime, err := imaging.Encode(out, opt.Format, 85, 3<<20)
+		data, mime, err := imaging.Encode(out, opt.Format, opt.Quality, 3<<20)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +186,7 @@ func (o *Ops) Screenshot(opt ShotOptions) (*Shot, error) {
 		o.s.mu.Unlock()
 	}
 	out := imaging.Resize(img, sc)
-	data, mime, err := imaging.Encode(out, opt.Format, 85, 3<<20)
+	data, mime, err := imaging.Encode(out, opt.Format, opt.Quality, 3<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -507,3 +509,57 @@ func (o *Ops) Resize(w, h int) (int, int, error) {
 
 // CtrlAltDel sends the secure attention sequence.
 func (o *Ops) CtrlAltDel() error { return o.Hotkey([]string{"ctrl", "alt", "delete"}) }
+
+// ---- live view (UI takeover) ----
+
+// SendDOMKey presses or releases a key given as a browser KeyboardEvent.code
+// (e.g. "KeyA", "ShiftLeft"). Used by the live view WebSocket.
+func (o *Ops) SendDOMKey(code string, down bool) error {
+	k, ok := keymap.FromDOMCode(code)
+	if !ok {
+		return fmt.Errorf("unsupported key %q", code)
+	}
+	return o.key(k, down)
+}
+
+// Wheel scrolls vertically by notches at desktop coordinates; negative notches scroll down.
+func (o *Ops) Wheel(x, y, notches int) error {
+	return o.wheel(x, y, notches, false)
+}
+
+// WheelH scrolls horizontally; negative notches scroll left.
+func (o *Ops) WheelH(x, y, notches int) error {
+	return o.wheel(x, y, notches, true)
+}
+
+func (o *Ops) wheel(x, y, notches int, horizontal bool) error {
+	if notches == 0 {
+		return nil
+	}
+	negative := notches < 0
+	if negative {
+		notches = -notches
+	}
+	if err := o.Move(x, y); err != nil {
+		return err
+	}
+	for i := 0; i < notches; i++ {
+		if err := o.mouse(keymap.WheelFlags(horizontal, negative), x, y); err != nil {
+			return err
+		}
+		_ = o.Sleep(15 * time.Millisecond)
+	}
+	return nil
+}
+
+// CursorOverlay returns the pointer state for the live view (refreshing a stale shape).
+func (o *Ops) CursorOverlay() imaging.Cursor {
+	return o.s.cursorSnapshot(o.ctx, o.w)
+}
+
+// CursorShapeSeq identifies the current pointer shape (changes when the shape changes).
+func (o *Ops) CursorShapeSeq() int {
+	o.s.mu.Lock()
+	defer o.s.mu.Unlock()
+	return o.s.cursor.shapeSeq
+}

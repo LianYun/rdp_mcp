@@ -2,8 +2,12 @@
 package audit
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png" // decode PNG tool results
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	xdraw "golang.org/x/image/draw"
 
 	"github.com/LianYun/rdp_mcp/internal/events"
 )
@@ -25,6 +31,7 @@ type Record struct {
 	DurationMs int64           `json:"duration_ms,omitempty"`
 	OK         *bool           `json:"ok,omitempty"`
 	Summary    string          `json:"summary,omitempty"`
+	Thumb      string          `json:"thumb,omitempty"` // URL path of the result screenshot thumbnail
 }
 
 type Logger struct {
@@ -35,10 +42,46 @@ type Logger struct {
 	bus        *events.Bus
 	seq        atomic.Int64
 	mu         sync.Mutex
+	thumbs     bool
+}
+
+// SetThumbnails enables or disables saving result screenshot thumbnails.
+func (l *Logger) SetThumbnails(on bool) { l.thumbs = on }
+
+// ThumbDir is where thumbnails are stored.
+func (l *Logger) ThumbDir() string { return filepath.Join(l.dir, "thumbs") }
+
+// SaveThumb stores a small JPEG of a tool result image and returns its URL path.
+func (l *Logger) SaveThumb(id string, img []byte) string {
+	if !l.enabled || !l.thumbs || len(img) == 0 {
+		return ""
+	}
+	src, _, err := image.Decode(bytes.NewReader(img))
+	if err != nil {
+		return ""
+	}
+	b := src.Bounds()
+	w, h := 320, b.Dy()*320/max(1, b.Dx())
+	if b.Dx() < w {
+		w, h = b.Dx(), b.Dy()
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, w, max(1, h)))
+	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
+	if err := os.MkdirAll(l.ThumbDir(), 0o700); err != nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 70}); err != nil {
+		return ""
+	}
+	if err := os.WriteFile(filepath.Join(l.ThumbDir(), id+".jpg"), buf.Bytes(), 0o600); err != nil {
+		return ""
+	}
+	return "/api/v1/audit/thumbs/" + id + ".jpg"
 }
 
 func New(dir string, enabled, redactTypedText bool, retentionDays int, bus *events.Bus) *Logger {
-	l := &Logger{dir: dir, enabled: enabled, redactType: redactTypedText, retention: retentionDays, bus: bus}
+	l := &Logger{dir: dir, enabled: enabled, redactType: redactTypedText, retention: retentionDays, bus: bus, thumbs: true}
 	if enabled {
 		_ = os.MkdirAll(dir, 0o700)
 		l.prune()
@@ -76,10 +119,10 @@ func (l *Logger) Begin(tool, machine string, in any) string {
 }
 
 // End records the end of a tool call.
-func (l *Logger) End(id, tool, machine string, in any, d time.Duration, isError bool, summary string) {
+func (l *Logger) End(id, tool, machine string, in any, d time.Duration, isError bool, summary, thumb string) {
 	ok := !isError
 	rec := Record{ID: id, Time: time.Now(), Phase: "end", Tool: tool, Machine: machine, Args: l.args(in),
-		DurationMs: d.Milliseconds(), OK: &ok, Summary: summary}
+		DurationMs: d.Milliseconds(), OK: &ok, Summary: summary, Thumb: thumb}
 	if l.bus != nil {
 		l.bus.Publish("tool_call", rec)
 	}
@@ -139,6 +182,13 @@ func (l *Logger) prune() {
 	files, _ := filepath.Glob(filepath.Join(l.dir, "*.jsonl"))
 	for _, f := range files {
 		if strings.TrimSuffix(filepath.Base(f), ".jsonl") < cutoff {
+			_ = os.Remove(f)
+		}
+	}
+	old := time.Now().AddDate(0, 0, -l.retention)
+	thumbs, _ := filepath.Glob(filepath.Join(l.ThumbDir(), "*.jpg"))
+	for _, f := range thumbs {
+		if st, err := os.Stat(f); err == nil && st.ModTime().Before(old) {
 			_ = os.Remove(f)
 		}
 	}

@@ -215,9 +215,28 @@ func cmdServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	al.SetThumbnails(cfg.Server.AuditScreenshots())
+	// applyCfg activates a new config, whether written by the admin API or edited on disk.
+	applyCfg := func(c *config.Config) {
+		if *listen != "" {
+			c.Server.Listen = *listen
+		}
+		if *workerPath != "" {
+			c.Server.WorkerPath = *workerPath
+		}
+		mgr.UpdateConfig(c)
+		mcpTokenMu.Lock()
+		mcpToken = c.Server.MCPToken
+		mcpTokenMu.Unlock()
+		level.Set(parseLevel(c.Server.LogLevel))
+		al.SetThumbnails(c.Server.AuditScreenshots())
+	}
+
 	api := &adminapi.API{
 		Mgr: mgr, Bus: bus, Audit: al, AdminToken: adminToken, MCPToken: getMCPToken,
 		Origins: cfg.Server.CORSOrigins, Shutdown: stop,
+		Keychain: secrets.Keychain{}, Apply: applyCfg,
+		LogFile: filepath.Join(dataDir, "logs", "rdp-mcp.log"),
 		Info: adminapi.ServiceInfo{
 			Version: version, PID: os.Getpid(), Listen: ln.Addr().String(),
 			MCPURL:     "http://" + ln.Addr().String() + "/mcp",
@@ -246,12 +265,7 @@ func cmdServe(args []string) error {
 	}
 
 	mgr.Start()
-	go watchConfig(ctx, cfg.Path, *listen, *workerPath, mgr, bus, log, func(c *config.Config) {
-		mcpTokenMu.Lock()
-		mcpToken = c.Server.MCPToken
-		mcpTokenMu.Unlock()
-		level.Set(parseLevel(c.Server.LogLevel))
-	})
+	go watchConfig(ctx, cfg.Path, *listen, *workerPath, mgr, bus, log, applyCfg)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -337,7 +351,6 @@ func watchConfig(ctx context.Context, path, listenOverride, workerOverride strin
 		if old.Server.EffectiveListen() != cfg.Server.EffectiveListen() || old.Server.DataDir != cfg.Server.DataDir {
 			log.Warn("server.listen/data_dir changed; restart rdp-mcp to apply")
 		}
-		mgr.UpdateConfig(cfg)
 		apply(cfg)
 		log.Info("config reloaded", "machines", len(cfg.Machines))
 		bus.Publish("config_changed", map[string]any{"machines": len(cfg.Machines)})

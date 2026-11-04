@@ -12,9 +12,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LianYun/rdp_mcp/internal/audit"
+	"github.com/LianYun/rdp_mcp/internal/config"
 	"github.com/LianYun/rdp_mcp/internal/events"
 	"github.com/LianYun/rdp_mcp/internal/session"
 )
@@ -40,6 +42,14 @@ type API struct {
 	MCPToken   func() string
 	Origins    []string
 	Shutdown   func()
+	// Keychain stores machine passwords (internal/secrets in production).
+	Keychain SecretStore
+	// Apply activates a config the API just wrote (manager + token + log level).
+	Apply func(*config.Config)
+	// LogFile is the service log shown by GET /logs.
+	LogFile string
+
+	cfgMu sync.Mutex // serializes config writes
 }
 
 func (a *API) Handler() http.Handler {
@@ -48,8 +58,23 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/service", a.auth(a.service))
 	mux.Handle("POST /api/v1/service/shutdown", a.auth(a.shutdown))
 	mux.Handle("GET /api/v1/service/mcp-token", a.auth(a.mcpToken))
+	mux.Handle("POST /api/v1/service/mcp-token/rotate", a.auth(a.rotateMCPToken))
 	mux.Handle("GET /api/v1/machines", a.auth(a.listMachines))
+	mux.Handle("POST /api/v1/machines", a.auth(a.createMachine))
 	mux.Handle("GET /api/v1/machines/{name}", a.auth(a.getMachine))
+	mux.Handle("PUT /api/v1/machines/{name}", a.auth(a.updateMachine))
+	mux.Handle("DELETE /api/v1/machines/{name}", a.auth(a.deleteMachine))
+	mux.Handle("PUT /api/v1/machines/{name}/secret", a.auth(a.putSecret))
+	mux.Handle("POST /api/v1/machines/{name}/test", a.auth(a.testMachine))
+	mux.Handle("POST /api/v1/machines/{name}/cert", a.auth(a.answerCert))
+	mux.Handle("GET /api/v1/machines/{name}/stream", a.auth(a.stream))
+	mux.Handle("GET /api/v1/config", a.auth(a.getConfig))
+	mux.Handle("PUT /api/v1/config/server", a.auth(a.putSection("server")))
+	mux.Handle("PUT /api/v1/config/defaults", a.auth(a.putSection("defaults")))
+	mux.Handle("GET /api/v1/config/raw", a.auth(a.getConfigRaw))
+	mux.Handle("PUT /api/v1/config/raw", a.auth(a.putConfigRaw))
+	mux.Handle("GET /api/v1/logs", a.auth(a.logs))
+	mux.Handle("GET /api/v1/audit/thumbs/{file}", a.auth(a.auditThumb))
 	mux.Handle("POST /api/v1/machines/{name}/connect", a.auth(a.connect))
 	mux.Handle("POST /api/v1/machines/{name}/disconnect", a.auth(a.disconnect))
 	mux.Handle("POST /api/v1/machines/{name}/reconnect", a.auth(a.reconnect))

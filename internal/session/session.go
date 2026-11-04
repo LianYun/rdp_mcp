@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,6 +38,8 @@ type Session struct {
 	manual       bool // disconnect requested
 	cursor       cursorState
 	viewers      map[chan struct{}]struct{}
+	pendingCert  *certPrompt
+	quiet        bool // test session: no bus events, no cert prompt, no reconnect
 }
 
 type cursorState struct {
@@ -65,6 +68,7 @@ type Info struct {
 	LastActivity *time.Time  `json:"last_activity,omitempty"`
 	ConnectedAt  *time.Time  `json:"connected_at,omitempty"`
 	Viewers      int         `json:"viewers"`
+	PendingCert  *CertPrompt `json:"pending_cert,omitempty"`
 }
 
 func (s *Session) Name() string { return s.name }
@@ -91,6 +95,10 @@ func (s *Session) Info() Info {
 	if !s.lastActivity.IsZero() {
 		t := s.lastActivity
 		in.LastActivity = &t
+	}
+	if p := s.pendingCert; p != nil {
+		in.PendingCert = &CertPrompt{Host: p.info.Host, Port: p.info.Port, Fingerprint: p.info.Fingerprint,
+			Subject: p.info.Subject, Issuer: p.info.Issuer, Reason: p.reason}
 	}
 	return in
 }
@@ -122,8 +130,11 @@ func (s *Session) setState(st State, errMsg string) {
 	if st == StateConnected {
 		info["resolution"] = []int{s.width, s.height}
 	}
+	quiet := s.quiet
 	s.mu.Unlock()
-	s.m.opts.Bus.Publish("machine_state", info)
+	if !quiet {
+		s.m.opts.Bus.Publish("machine_state", info)
+	}
 }
 
 func (s *Session) checkSource(src Source) error {
@@ -242,9 +253,47 @@ func (s *Session) connect(ctx context.Context) error {
 	}
 	waited, logon := waitFirstFrame(ctx, w)
 	log.Debug("desktop ready", "waited", waited, "logon_notified", logon)
+	// Some servers drop the connection moments after a previous session to the same
+	// machine ended. Detect that within a short window and retry once quickly
+	// instead of failing the caller's operation.
+	select {
+	case <-w.Done():
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if s.quickRetryOnce(ctx, log, w.Err()) {
+			return s.connect(ctx)
+		}
+		return errors.New("connection dropped right after connecting: " + errString(w.Err()))
+	case <-time.After(1500 * time.Millisecond):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	s.setState(StateConnected, "")
 	log.Info("connected", "width", size.Width, "height", size.Height, "freerdp", w.Hello.FreeRDP)
 	return nil
+}
+
+// quickRetryOnce sleeps briefly and reports whether a quick reconnect is worth
+// trying (only one retry per connect, never for quiet test sessions).
+func (s *Session) quickRetryOnce(ctx context.Context, log *slog.Logger, cause error) bool {
+	if s.quiet {
+		return false
+	}
+	log.Warn("connection dropped right after connecting; retrying once", "err", errString(cause))
+	select {
+	case <-time.After(1200 * time.Millisecond):
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return "unknown error"
+	}
+	return err.Error()
 }
 
 func isCertErr(s string) bool { return len(s) >= 11 && s[:11] == "certificate" }
@@ -281,8 +330,11 @@ func (s *Session) eventLoop(w *worker.Client, gen int) {
 			if wasConnected && !manual {
 				log.Warn("session lost", "err", w.Err())
 				if attempts > 0 {
+					s.mu.Lock()
+					quick := time.Since(s.connectedAt) < 5*time.Second
+					s.mu.Unlock()
 					s.setState(StateReconnecting, "connection lost")
-					go s.reconnectLoop(gen, attempts)
+					go s.reconnectLoop(gen, attempts, quick)
 				} else {
 					s.setState(StateFailed, "connection lost")
 				}
@@ -297,33 +349,9 @@ func (s *Session) eventLoop(w *worker.Client, gen int) {
 func (s *Session) handleEvent(w *worker.Client, ev worker.Event) {
 	switch ev.Name {
 	case "cert_verify":
-		var c struct {
-			Host        string `json:"host"`
-			Port        int    `json:"port"`
-			Fingerprint string `json:"fingerprint"`
-			Subject     string `json:"subject"`
-			Issuer      string `json:"issuer"`
-		}
+		var c certInfo
 		_ = ev.Decode(&c)
-		accept, reason := s.decideCert(c.Host, c.Port, c.Fingerprint)
-		if !accept {
-			s.mu.Lock()
-			s.lastErr = reason
-			s.mu.Unlock()
-			s.m.opts.Bus.Publish("cert_verify", map[string]any{
-				"machine": s.name, "host": c.Host, "port": c.Port,
-				"fingerprint": c.Fingerprint, "subject": c.Subject, "issuer": c.Issuer, "reason": reason,
-			})
-		}
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			a := 0
-			if accept {
-				a = 2
-			}
-			_, _ = w.Call(ctx, "cert_reply", map[string]any{"accept": a})
-		}()
+		s.handleCertVerify(w, c, s.m.opts.Logger.With("machine", s.name))
 	case "disconnected":
 		var d struct{ Reason string }
 		_ = ev.Decode(&d)
@@ -392,9 +420,12 @@ func (s *Session) decideCert(host string, port int, fp string) (bool, string) {
 	}
 }
 
-func (s *Session) reconnectLoop(gen, attempts int) {
+func (s *Session) reconnectLoop(gen, attempts int, quick bool) {
 	for i := 1; i <= attempts; i++ {
 		delay := time.Duration(1<<min(i, 5)) * time.Second
+		if quick && i == 1 {
+			delay = time.Second // dropped right after connecting: retry fast once
+		}
 		select {
 		case <-time.After(delay):
 		case <-s.m.ctx.Done():
@@ -626,4 +657,27 @@ func waitFirstFrame(ctx context.Context, w *worker.Client) (time.Duration, bool)
 		}
 	}
 	return time.Since(start), false
+}
+
+// ErrNotConnected is returned by Peek when the session has no live connection.
+var ErrNotConnected = errors.New("not connected")
+
+// Peek runs read-only fn (captures, cursor) on the current connection without taking
+// the operation lock, so the UI live view keeps updating while a long agent action
+// (e.g. run_command) holds the lock. It never connects.
+func (s *Session) Peek(ctx context.Context, fn func(o *Ops) error) error {
+	s.mu.Lock()
+	w, st := s.w, s.state
+	s.mu.Unlock()
+	if w == nil || st != StateConnected {
+		return ErrNotConnected
+	}
+	return fn(&Ops{s: s, w: w, ctx: ctx})
+}
+
+// State returns the connection state.
+func (s *Session) State() State {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state
 }

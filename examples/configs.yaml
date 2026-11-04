@@ -6,6 +6,8 @@ server:
   audit:
     enabled: true
     retention_days: 7
+  # ocr:                        # screenshot 的 ocr 参数；需安装 tesseract
+  #   languages: chi_sim+eng
 
 defaults:
   port: 3389

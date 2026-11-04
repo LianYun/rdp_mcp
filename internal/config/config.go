@@ -82,6 +82,14 @@ type Server struct {
 	WorkerPath         string   `yaml:"worker_path,omitempty" json:"worker_path"`
 	LogLevel           string   `yaml:"log_level,omitempty" json:"log_level"`
 	Audit              Audit    `yaml:"audit,omitempty" json:"audit"`
+	OCR                OCR      `yaml:"ocr,omitempty" json:"ocr"`
+}
+
+// OCR configures server-side text recognition on screenshots (docs/design.md D16).
+type OCR struct {
+	Enabled   *bool  `yaml:"enabled,omitempty" json:"enabled"`
+	Tesseract string `yaml:"tesseract,omitempty" json:"tesseract"` // path; default: found in PATH
+	Languages string `yaml:"languages,omitempty" json:"languages"` // e.g. "chi_sim+eng"; default: auto
 }
 
 // MachineOptions are fields that may appear in defaults and per machine.
@@ -208,6 +216,7 @@ func (s Server) EffectiveMaxWidth() int  { return firstNonZero(s.ScreenshotMaxWi
 func (s Server) EffectiveDrawCursor() bool {
 	return s.DrawCursor == nil || *s.DrawCursor
 }
+func (s Server) OCREnabled() bool       { return s.OCR.Enabled == nil || *s.OCR.Enabled }
 func (s Server) AuditEnabled() bool     { return s.Audit.Enabled == nil || *s.Audit.Enabled }
 func (s Server) AuditScreenshots() bool { return s.Audit.Screenshots == nil || *s.Audit.Screenshots }
 func (s Server) AuditRetentionDays() int {

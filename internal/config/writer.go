@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -416,4 +417,55 @@ func SaveRaw(path string, raw []byte) (*Config, error) {
 		return nil, err
 	}
 	return cfg, os.Rename(tmp, path)
+}
+
+// IsPasswordRef reports whether pw references a secret (keychain:<key> or ${VAR})
+// rather than being a literal password.
+func IsPasswordRef(pw string) bool {
+	return strings.HasPrefix(pw, "keychain:") || envRef.MatchString(pw)
+}
+
+// UpdateSection sets or removes (nil value) keys in a top-level mapping section
+// ("server" or "defaults"). Dotted keys address one nested level, e.g. "audit.enabled"
+// or "ocr.languages". Comments and unrelated keys are preserved.
+func UpdateSection(path, section string, set map[string]any) (*Config, error) {
+	if section != "server" && section != "defaults" {
+		return nil, fmt.Errorf("unknown section %q", section)
+	}
+	root, _, err := loadRoot(path)
+	if err != nil {
+		return nil, err
+	}
+	top := root.Content[0]
+	sec := ensureMap(top, section)
+	for _, k := range sortedKeys(set) {
+		v := set[k]
+		target, key := sec, k
+		if parent, child, ok := strings.Cut(k, "."); ok {
+			target, key = ensureMap(sec, parent), child
+		}
+		if v == nil {
+			mapDelete(target, key)
+			continue
+		}
+		if err := mapSet(target, key, v); err != nil {
+			return nil, fmt.Errorf("%s.%s: %w", section, k, err)
+		}
+	}
+	return saveRoot(path, root)
+}
+
+// ensureMap returns the mapping stored under key in m, creating (or replacing a
+// null/scalar value with) an empty mapping when needed.
+func ensureMap(m *yaml.Node, key string) *yaml.Node {
+	v := mapGet(m, key)
+	if v == nil {
+		v = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, v)
+		return v
+	}
+	if v.Kind != yaml.MappingNode {
+		*v = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	}
+	return v
 }
