@@ -1,8 +1,8 @@
-# remoter 技术方案
+# Remoter 技术方案
 
 > 状态：v0.4（2026-11-04）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
 >
-> 命名（D20）：产品与桌面应用 `remoter`；服务 / CLI `remoter-mcp`；worker `remoter-worker`；数据目录 `~/.remoter`；环境变量 `REMOTER_MCP_*`。
+> 命名（D20）：产品与桌面应用显示名 `Remoter`（`Remoter.app`）；技术名称一律小写：bundle id `com.lianyun.remoter`；服务 / CLI `remoter-mcp`；worker `remoter-worker`；数据目录 `~/.remoter`；环境变量 `REMOTER_MCP_*`。
 >
 > 子文档：[MCP 工具规范](mcp-tools.md) · [管理 API](admin-api.md) · [桌面应用](ui.md) · [配置说明](configuration.md) · [Worker IPC 协议](worker-ipc.md) · [构建与发布](packaging.md) · [路线图](roadmap.md)
 
@@ -67,13 +67,13 @@
 | D17 | 不在 Windows 端常驻代理 | 零常驻、无杀软隔离风险、无需引导时间 | win-rdp-mcp 式常驻 exe（见 comparison-win-rdp-mcp.md） |
 | D18 | 系统 / 窗口 / UIA 能力用预设临时 PowerShell 脚本实现，经 `run_command` 通道执行 | 复用现有零常驻通道；输出由脚本结构化并限制条数，避免撑爆上下文 | 每类一个专用工具（工具数膨胀） |
 | D19 | 长任务通过 `run_command detach` + `job` 工具异步执行 | 复用 jobs 目录的 .out/.err/.code 文件，无需新机制；模型可边跑安装边操作界面 | 同步阻塞直到超时 |
-| D20 | 全面更名为 **remoter**：应用 `remoter`（bundle id `com.lianyun.remoter`）、`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名 `remoter`；Go module 路径暂不变 | 名称统一；首次启动自动从 `~/.rdp_mcp` 复制配置、`.env`、`known_hosts`，钥匙串回退读取旧服务名，用户无需手动迁移 | 只改对外显示名（技术名与产品名不一致） |
+| D20 | 全面更名为 **remoter**：应用显示名 `Remoter`（`Remoter.app`，bundle id `com.lianyun.remoter`），其余技术名称小写、`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名 `remoter`；Go module 路径暂不变 | 名称统一；首次启动自动从 `~/.rdp_mcp` 复制配置、`.env`、`known_hosts`，钥匙串回退读取旧服务名，用户无需手动迁移 | 只改对外显示名（技术名与产品名不一致） |
 
 ## 4. 总体架构
 
 ```
  ┌──────────────────────────┐        ┌──────────────────────────────┐
- │  MCP 客户端（模型）         │        │  remoter 桌面应用（Tauri）     │
+ │  MCP 客户端（模型）         │        │  Remoter 桌面应用（Tauri）     │
  │  Claude Code / Desktop … │        │  React UI ── HTTP/SSE/WS ──┐   │
  └────────────┬─────────────┘        │  Rust：进程管理/托盘/自启动   │   │
               │ /mcp  (Bearer mcp_token)  └──────────┬─────────────┘   │
@@ -104,7 +104,7 @@
 |---|---|---|
 | `remoter-mcp` | Go | 服务 + CLI |
 | `remoter-worker` | C | 单机器 RDP 会话进程，由服务拉起 |
-| remoter 桌面应用 | Tauri（Rust + React） | 桌面管理应用，内置前两者作为 sidecar |
+| Remoter 桌面应用 | Tauri（Rust + React） | 桌面管理应用，内置前两者作为 sidecar |
 
 ## 5. remoter-worker（C）
 

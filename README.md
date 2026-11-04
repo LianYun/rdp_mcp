@@ -1,4 +1,4 @@
-# remoter
+# Remoter
 
 基于 [FreeRDP](https://github.com/FreeRDP/FreeRDP) 的 Windows 远程控制 MCP 服务：让大模型通过 MCP（Streamable HTTP）控制多台 Windows 电脑，并提供 Tauri 桌面管理应用。
 
@@ -10,7 +10,7 @@
 |---|---|
 | `remoter-mcp` | Go 服务 + CLI，可独立运行（命令行 / Docker），也可由桌面应用启动 |
 | `remoter-worker` | C + libfreerdp，每台 Windows 一个无界面会话进程 |
-| remoter（桌面应用） | Tauri 应用：管理机器、启停服务、实时画面与人工接管、操作记录 |
+| Remoter（桌面应用 `Remoter.app`） | Tauri 应用：管理机器、启停服务、实时画面与人工接管、操作记录 |
 
 从 rdp_mcp 升级：首次以默认路径启动 `remoter-mcp` 时，会把 `~/.rdp_mcp` 中的 `configs.yaml`、`.env`、`known_hosts` 复制到 `~/.remoter`（旧目录保留）；旧钥匙串条目（服务名 `rdp_mcp`）仍可读取。环境变量已改为 `REMOTER_MCP_*`。
 
