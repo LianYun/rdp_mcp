@@ -188,7 +188,8 @@ export interface MachineStateEvent {
   machine: string;
   state: MachineState;
   error?: string;
-  resolution?: string;
+  /** 服务端发送 [width, height]；也兼容 "WxH" 字符串。 */
+  resolution?: [number, number] | string;
 }
 export interface ControlModeEvent {
   machine: string;

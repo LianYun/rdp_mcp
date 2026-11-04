@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,11 +53,17 @@ function ConfigSection({ kind }: { kind: "server" | "defaults" }) {
   const [needRestart, setNeedRestart] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const beforeRef = useRef(before);
+  beforeRef.current = before;
+
+  // 服务端配置变化（含我们自己保存后的回读）时更新“基线”；只有表单没有未保存修改时才覆盖输入，
+  // 避免后台刷新冲掉正在编辑的内容。
   useEffect(() => {
     if (!cfg.data) return;
     const r = readAll(specs, kind === "server" ? cfg.data.server : cfg.data.defaults);
+    const same = (a: Record<string, string>, b: Record<string, string>) => specs.every((s) => (a[s.key] ?? "") === (b[s.key] ?? ""));
+    setVals((cur) => (same(cur, beforeRef.current) ? r : cur));
     setBefore(r);
-    setVals(r);
   }, [cfg.data, kind, specs]);
 
   if (!running) return <p className="text-sm text-muted-foreground">{t("settings.service_down")}</p>;

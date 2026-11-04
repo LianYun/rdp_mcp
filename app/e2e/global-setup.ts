@@ -3,10 +3,7 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-
-export const ROOT = "/tmp/rdptest-ui";
-export const STATE = path.join(ROOT, "state.json");
-const REPO = path.resolve(__dirname, "../..");
+import { REPO, ROOT, STATE } from "./env";
 
 function waitFor<T>(what: string, fn: () => T | undefined, timeoutMs = 30_000): Promise<T> {
   const start = Date.now();

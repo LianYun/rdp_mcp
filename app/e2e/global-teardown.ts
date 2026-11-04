@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { STATE } from "./global-setup";
+import { STATE } from "./env";
 
 function alive(pid: number): boolean {
   try {

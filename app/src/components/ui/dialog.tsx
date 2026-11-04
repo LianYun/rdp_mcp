@@ -16,7 +16,7 @@ export const DialogContent = React.forwardRef<
     <D.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-full -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg",
+        "fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg",
         wide ? "max-w-3xl" : "max-w-lg",
         className,
       )}
@@ -37,13 +37,13 @@ export const DialogHeader = ({ className, ...p }: React.HTMLAttributes<HTMLDivEl
   <div className={cn("flex flex-col space-y-1.5", className)} {...p} />
 );
 export const DialogFooter = ({ className, ...p }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-row justify-end gap-2", className)} {...p} />
+  <div className={cn("flex flex-row flex-wrap justify-end gap-2", className)} {...p} />
 );
 export const DialogTitle = React.forwardRef<HTMLHeadingElement, React.ComponentPropsWithoutRef<typeof D.Title>>(
   ({ className, ...p }, ref) => <D.Title ref={ref} className={cn("text-lg font-semibold", className)} {...p} />,
 );
 DialogTitle.displayName = "DialogTitle";
 export const DialogDescription = React.forwardRef<HTMLParagraphElement, React.ComponentPropsWithoutRef<typeof D.Description>>(
-  ({ className, ...p }, ref) => <D.Description ref={ref} className={cn("text-sm text-muted-foreground", className)} {...p} />,
+  ({ className, ...p }, ref) => <D.Description ref={ref} className={cn("break-words text-sm text-muted-foreground [overflow-wrap:anywhere]", className)} {...p} />,
 );
 DialogDescription.displayName = "DialogDescription";

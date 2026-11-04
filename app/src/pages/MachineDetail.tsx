@@ -82,7 +82,7 @@ export default function MachineDetail() {
     const mc = cfg.machines?.find((m) => m.name === name);
     if (!mc) throw new Error(t("detail.not_found", { name }));
     // PUT 为整体替换：用现有配置重建，只改宽高；密码字段省略 = 保留原设置。
-    await client.updateMachine(name, toMachineDef({ ...formFromConfig(mc), width: String(w), height: String(h) }, { editing: name }));
+    await client.saveMachine(name, toMachineDef({ ...formFromConfig(mc), width: String(w), height: String(h) }, { editing: name }));
     await client.reconnect(name);
     await qc.invalidateQueries({ queryKey: ["config"] });
   };

@@ -17,6 +17,8 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 1360, height: 860 },
     trace: "retain-on-failure",
+    // 默认使用 Playwright 自带的 Chromium；E2E_CHANNEL=chrome 可改用本机已安装的 Chrome（无需下载）
+    ...(process.env.E2E_CHANNEL ? { channel: process.env.E2E_CHANNEL } : {}),
   },
   webServer: {
     command: `pnpm exec vite --port ${PORT} --strictPort`,

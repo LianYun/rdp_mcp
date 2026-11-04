@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, STATE } from "./global-setup";
+import { ROOT, STATE } from "./env";
 
 const st = () => JSON.parse(fs.readFileSync(STATE, "utf8")) as { listen: string; token: string };
 const shot = (page: Page, name: string) => page.screenshot({ path: path.join(ROOT, "shots", `${name}.png`) });
@@ -123,10 +123,13 @@ test("machine create / edit / test connection / delete", async ({ page }) => {
   await page.getByTestId("tag-filter").selectOption("");
 
   // 启用开关
+  const enabledOf = async () => (await api<{ enabled: boolean }>("GET", "/machines/e2e-pc")).data.enabled;
   await page.getByTestId("enabled-e2e-pc").click();
-  await expect.poll(async () => (await api<{ enabled: boolean }>("GET", "/machines/e2e-pc")).data.enabled).toBe(false);
+  await expect.poll(enabledOf).toBe(false);
+  await expect(page.getByTestId("toaster")).not.toContainText("internal");
+  await expect(page.getByTestId("row-e2e-pc")).toBeVisible();
   await page.getByTestId("enabled-e2e-pc").click();
-  await expect.poll(async () => (await api<{ enabled: boolean }>("GET", "/machines/e2e-pc")).data.enabled).toBe(true);
+  await expect.poll(enabledOf).toBe(true);
 
   // 删除（二次确认）
   await page.getByTestId("delete-e2e-pc").click();
@@ -146,6 +149,12 @@ test("certificate confirmation dialog on cert_verify", async ({ page }) => {
     await page.getByTestId("btn-connect").click();
     await expect(page.getByTestId("cert-dialog")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("cert-fingerprint")).not.toBeEmpty();
+    // 对话框不能被长指纹撑出视口：三个按钮都必须完整可见
+    for (const id of ["cert-reject", "cert-once", "cert-always"]) {
+      const b = await page.getByTestId(id).boundingBox();
+      const dlg = await page.getByTestId("cert-dialog").boundingBox();
+      expect(b && dlg && b.x >= dlg.x && b.x + b.width <= dlg.x + dlg.width + 1).toBe(true);
+    }
     await shot(page, "04-cert-dialog");
     await page.getByTestId("cert-once").click();
     await expect(page.getByTestId("cert-dialog")).toHaveCount(0);
@@ -276,6 +285,7 @@ test("settings: server config, theme and language", async ({ page }) => {
   await page.getByRole("tab", { name: "应用" }).click();
   await page.getByTestId("app-theme").selectOption("dark");
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.waitForTimeout(400); // 等颜色过渡结束再截图
   await shot(page, "09-settings-dark");
   await page.getByTestId("app-language").selectOption("en");
   await expect(page.getByTestId("nav-overview")).toHaveText("Overview");

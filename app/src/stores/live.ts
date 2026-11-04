@@ -16,6 +16,8 @@ interface Store extends LiveState {
   busy: boolean;
   lastError?: string;
   refresh: () => Promise<void>;
+  /** 重新拉取机器列表（config_changed 后、本地增删改后）。 */
+  reloadMachines: () => Promise<void>;
   setBusy: (b: boolean, err?: string) => void;
   dispatch: (ev: ServerEvent) => void;
 }
@@ -33,7 +35,22 @@ export const useLive = create<Store>((set, get) => ({
 
   setBusy: (busy, err) => set({ busy, lastError: err }),
 
-  dispatch: (ev) => set((s) => reduceEvent(s, ev)),
+  dispatch: (ev) => {
+    set((s) => reduceEvent(s, ev));
+    // config_changed 只带机器数量，机器列表需要重新拉取
+    if (ev.type === "config_changed") void get().reloadMachines();
+  },
+
+  reloadMachines: async () => {
+    const client = get().client;
+    if (!client) return;
+    try {
+      const machines = await client.machines();
+      set((s) => reduceEvent(s, { type: "snapshot", data: { machines } }));
+    } catch {
+      /* 下一次事件或轮询会再试 */
+    }
+  },
 
   refresh: async () => {
     let d: Discovery;

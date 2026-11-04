@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialLive, mergeActivity, reduceEvent, MAX_ACTIVITY } from "@/stores/reduce";
+import { initialLive, mergeActivity, parseResolution, reduceEvent, MAX_ACTIVITY } from "@/stores/reduce";
 import type { AuditRecord, MachineInfo } from "@/api/types";
 
 const m = (name: string, p: Partial<MachineInfo> = {}): MachineInfo => ({
@@ -29,6 +29,14 @@ describe("reduceEvent", () => {
     let s = reduceEvent(initialLive(), { type: "snapshot", data: { machines: [m("a")] } });
     s = reduceEvent(s, { type: "machine_state", data: { machine: "a", state: "connected", resolution: "1920x1080" } });
     expect(s.machines[0]).toMatchObject({ state: "connected", width: 1920, height: 1080 });
+  });
+
+  it("accepts the [w, h] array resolution the server actually sends", () => {
+    let s = reduceEvent(initialLive(), { type: "snapshot", data: { machines: [m("a")] } });
+    s = reduceEvent(s, { type: "machine_state", data: { machine: "a", state: "connected", resolution: [1600, 900] } });
+    expect(s.machines[0]).toMatchObject({ state: "connected", width: 1600, height: 900 });
+    expect(parseResolution(undefined)).toEqual({});
+    expect(parseResolution("garbage")).toEqual({});
   });
 
   it("clears a pending cert once the machine connects or fails", () => {

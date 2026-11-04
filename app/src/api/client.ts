@@ -107,6 +107,9 @@ export class ApiClient {
   machine = (name: string) => this.json<MachineInfo>("GET", `/machines/${encodeURIComponent(name)}`);
   createMachine = (def: MachineDef) => this.json<MachineInfo>("POST", "/machines", def);
   updateMachine = (name: string, def: MachineDef) => this.json<MachineInfo>("PUT", `/machines/${encodeURIComponent(name)}`, def);
+
+  /** 新增（editing 为空）或整体替换（editing 为原机器名）。 */
+  saveMachine = (editing: string | undefined, def: MachineDef) => (editing ? this.updateMachine(editing, def) : this.createMachine(def));
   deleteMachine = (name: string, deleteSecret = false) =>
     this.json<{ status: string }>("DELETE", `/machines/${encodeURIComponent(name)}${deleteSecret ? "?delete_secret=true" : ""}`);
   putSecret = (name: string, password: string) =>

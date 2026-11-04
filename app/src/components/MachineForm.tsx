@@ -59,13 +59,8 @@ export function MachineFormDialog({ initial, editing, onClose, onSaved }: Props)
     setBusy(true);
     try {
       const def = toMachineDef(f, { editing });
-      if (editing) {
-        await client.updateMachine(editing, def);
-        toast.success(t("machines.updated", { name: f.name }));
-      } else {
-        await client.createMachine(def);
-        toast.success(t("machines.created", { name: f.name }));
-      }
+      await client.saveMachine(editing, def);
+      toast.success(editing ? t("machines.updated", { name: f.name }) : t("machines.created", { name: f.name }));
       onSaved();
       onClose();
     } catch (e) {

@@ -49,6 +49,12 @@ export default function Machines() {
     return true;
   });
 
+  // 本地改动后立刻刷新配置与机器列表（SSE 的 config_changed 也会触发同样的刷新）
+  const changed = async () => {
+    await qc.invalidateQueries({ queryKey: ["config"] });
+    await useLive.getState().reloadMachines();
+  };
+
   const openEdit = (name: string) => {
     const c = cfgByName.get(name);
     if (!c) return toast.error(t("common.loading"));
@@ -61,8 +67,8 @@ export default function Machines() {
     try {
       // PUT 是整体替换：用当前配置重建 body，仅改 enabled；密码字段省略 = 保留原有设置。
       const f = formFromConfig(c);
-      await client.updateMachine(name, toMachineDef({ ...f, enabled }, { editing: name }));
-      await qc.invalidateQueries({ queryKey: ["config"] });
+      await client.saveMachine(name, toMachineDef({ ...f, enabled }, { editing: name }));
+      await changed();
     } catch (e) {
       toast.error(e);
     }
@@ -183,7 +189,7 @@ export default function Machines() {
           initial={form.initial}
           editing={form.editing}
           onClose={() => setForm(null)}
-          onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })}
+          onSaved={changed}
         />
       )}
       <ConfirmDialog
@@ -198,7 +204,7 @@ export default function Machines() {
           try {
             await client!.deleteMachine(del!, delSecret);
             toast.success(t("machines.deleted", { name: del! }));
-            await qc.invalidateQueries({ queryKey: ["config"] });
+            await changed();
           } catch (e) {
             toast.error(e);
           }
