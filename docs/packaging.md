@@ -39,7 +39,9 @@
 
 ## 4. FreeRDP 动态库处理
 
-- **macOS**：Homebrew 的 FreeRDP 不能假设用户已安装。`scripts/bundle-macos-libs.py`（不依赖 `dylibbundler`）递归解析 `rdp-worker` 的非系统依赖（`libfreerdp3`、`libfreerdp-client3`、`libwinpr3`、OpenSSL 等），平铺复制到 `app/src-tauri/frameworks/`，把每个库的 id 与依赖改为 `@rpath/<name>`（库自身加 rpath `@loader_path`，worker 加 rpath `@executable_path/../Frameworks`），再 ad-hoc 重签名（`install_name_tool` 会使签名失效，arm64 上未签名的二进制会被系统杀掉）。脚本最后校验没有任何文件仍指向 `/opt/homebrew` 等非系统路径，并生成 `tauri.macos.conf.json`（`bundle.macOS.files` 把这些库放进 `Contents/Frameworks`）。正式发布时签名与公证需覆盖所有 dylib。
+- **macOS**：Homebrew 的 FreeRDP 不能假设用户已安装。`scripts/bundle-macos-libs.py`（不依赖 `dylibbundler`）递归解析 `rdp-worker` 的非系统依赖（`libfreerdp3`、`libfreerdp-client3`、`libwinpr3`、OpenSSL 等），平铺复制到 `app/src-tauri/frameworks/`，把每个库的 id 与依赖改为 `@rpath/<name>`（库自身加 rpath `@loader_path`，worker 加 rpath `@executable_path/../Frameworks`），再 ad-hoc 重签名（`install_name_tool` 会使签名失效，arm64 上未签名的二进制会被系统杀掉）。脚本最后校验没有任何文件仍指向 `/opt/homebrew` 等非系统路径，并生成 `tauri.macos.conf.json`（`bundle.macOS.files` 把这些库放进 `Contents/Frameworks`）。
+
+  **OpenSSL provider 模块**：`libcrypto` 在运行时按编译进去的路径（Homebrew 的 Cellar 目录）`dlopen` `ossl-modules/legacy.dylib`（WinPR 的 NTLM 需要其中的 MD4，没有它 NLA 登录会失败）。这个文件不在 `otool -L` 的依赖里，脚本会把它连同依赖一起放进 `Frameworks/ossl-modules/`；运行时必须设置 `OPENSSL_MODULES=<App>.app/Contents/Frameworks/ossl-modules`——桌面应用启动 sidecar 时由 Rust 侧设置（`service.rs`）。**CLI 压缩包（macOS 版）也有同样的需求**：需要由启动脚本设置该环境变量，或让 `rdp-worker` 启动时按自身路径设置（待办）。正式发布时签名与公证需覆盖所有 dylib。
 - **Linux .deb**：声明依赖 `libfreerdp3-3, libfreerdp-client3-3, libwinpr3-3`。
 - **Linux AppImage / CLI 压缩包**：使用源码最小构建的 FreeRDP 并打包进 `lib/`，`rpath=$ORIGIN/../lib`。
 - 静态链接 FreeRDP 作为后续可选优化（`-DBUILD_SHARED_LIBS=OFF`）。
@@ -79,14 +81,36 @@ Tauri 打包后 sidecar 去掉 triple 后缀，与应用可执行文件同目录
 
 ### 6.3 macOS：未签名的 .dmg
 
-当前发布的 `.dmg` **未签名、未公证**（`signingIdentity: "-"`，即 ad-hoc 签名，保证 arm64 上能运行，但 Gatekeeper 不认）。首次打开：
+当前发布的 `.dmg` **未签名、未公证**（`signingIdentity: "-"`，即 ad-hoc 签名，保证 arm64 上能运行，但 Gatekeeper 不认）。
+
+**hardened runtime 与库校验**：Tauri 重新签名 sidecar 时会带上 hardened runtime，此时 dyld 会拒绝加载与进程 Team ID 不同的 dylib（ad-hoc 签名的库没有 Team ID），`rdp-worker` 启动即 abort（`mapping process and mapped file have different Team IDs`）。因此 `app/src-tauri/entitlements.plist` 声明了 `com.apple.security.cs.disable-library-validation`，由 `tauri.conf.json` 的 `bundle.macOS.entitlements` 引用。改用 Developer ID 签名所有 dylib 后可去掉这一项。打包后务必实际启动一次验证（见 §6.4），`codesign --verify` 通过不代表 dyld 肯加载。
+
+首次打开：
 
 - 把 `rdp_mcp.app` 拖到「应用程序」后，在访达中**右键 → 打开 → 打开**；或
 - 终端执行 `xattr -cr /Applications/rdp_mcp.app` 去掉隔离属性后正常双击。
 
 正式签名与公证（Developer ID + `notarytool`）是后续工作：在 `tauri.conf.json` 设置 `bundle.macOS.signingIdentity`，并提供 `APPLE_*` 环境变量；`scripts/bundle-macos-libs.py` 里的 ad-hoc 签名届时由 Tauri 重新签名覆盖。
 
-### 6.4 Linux：AppImage 与 .deb（配置说明，未在本机构建）
+### 6.4 验证打包结果
+
+```bash
+APP=app/src-tauri/target/release/bundle/macos/rdp_mcp.app
+# 1) 不能再引用 Homebrew 等非系统路径
+for f in $APP/Contents/MacOS/* $APP/Contents/Frameworks/*.dylib; do
+  otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/usr/local' && echo "BAD $f"
+done
+# 2) 用测试数据目录启动应用，确认拉起内置 sidecar，并用内置 worker 连接示例服务器
+mkdir -p /tmp/x && cat > /tmp/x/configs.yaml <<EOF
+server: {listen: "127.0.0.1:18766", data_dir: /tmp/x}
+machines: [{name: sample, host: 127.0.0.1, port: 13390, username: test, password: test, security: tls, enable_drive: false}]
+EOF
+RDP_MCP_DATA_DIR=/tmp/x $APP/Contents/MacOS/rdp-mcp-desktop &
+# /tmp/x/run/service.json 中 managed_by 应为 ui-sidecar；POST /machines/sample/connect 成功；
+# lsof -p <worker pid> 里 dylib 全部来自 rdp_mcp.app/Contents/Frameworks，没有 /opt/homebrew
+```
+
+### 6.5 Linux：AppImage 与 .deb（配置说明，未在本机构建）
 
 - **.deb**：`tauri.conf.json` 的 `bundle.linux.deb.depends` 声明 `libfreerdp3-3`、`libfreerdp-client3-3`、`libwinpr3-3`，sidecar 直接链接系统库（`rdp-worker` 的 rpath 为 `$ORIGIN/../lib`，找不到时回退系统库路径）。构建机需要 `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf`；目标系统需 Debian 13 / Ubuntu 24.04+（`freerdp3` 包）。
 - **AppImage**：不能假设目标系统有 FreeRDP 3，需要把库打进包里。做法：在 Linux 上用 `ldd` 收集 `rdp-worker` 的非系统依赖（`libfreerdp3`、`libfreerdp-client3`、`libwinpr3`、`libssl`、`libcrypto` 等，不含 glibc/libstdc++），复制到 `app/src-tauri/frameworks/`，用 `patchelf --set-rpath '$ORIGIN/../lib' rdp-worker`，再通过 `tauri.linux.conf.json` 的 `bundle.linux.appimage.files`（目标 `usr/lib/<lib>`）放入 AppImage；sidecar 位于 `usr/bin/`，所以 `$ORIGIN/../lib` 正好指向 `usr/lib/`。源码最小构建 FreeRDP 的参数见 §1。

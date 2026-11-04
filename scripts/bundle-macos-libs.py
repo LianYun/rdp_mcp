@@ -103,6 +103,7 @@ def main() -> int:
 
     # name -> 复制后的路径；dep 字符串 -> name（同一个库可能被不同路径引用）
     copied: dict[str, Path] = {}
+    module_paths: list[Path] = []  # OpenSSL provider 模块（frameworks/ossl-modules/*.dylib）
     queue: list[tuple[Path, Path]] = [(binary, binary)]  # (原始路径, 当前文件路径)
     seen_real: dict[Path, str] = {}
     changes: dict[Path, list[tuple[str, str]]] = {}  # 文件 -> [(旧依赖, 新依赖)]
@@ -131,24 +132,42 @@ def main() -> int:
                 copied[name] = dest
                 seen_real[real] = name
                 queue.append((real, dest))
+                # OpenSSL 的 provider 模块（legacy.dylib 提供 NTLM 用的 MD4）由 libcrypto 在运行时按编译进去的
+                # 绝对路径 dlopen，不在依赖里；必须一起打包，并在运行时用 OPENSSL_MODULES 指过去
+                # （桌面应用启动 sidecar 时由 Rust 侧设置，见 service.rs）。
+                if name.startswith("libcrypto"):
+                    mdir = real.parent / "ossl-modules"
+                    if mdir.is_dir():
+                        (out / "ossl-modules").mkdir(exist_ok=True)
+                        for m in sorted(mdir.glob("*.dylib")):
+                            mdest = out / "ossl-modules" / m.name
+                            shutil.copy2(m, mdest)
+                            mdest.chmod(0o755)
+                            module_paths.append(mdest)
+                            queue.append((m, mdest))
             changes.setdefault(cur, []).append((dep, f"@rpath/{name}"))
 
     # 改写 install name
     for name, path in copied.items():
         run("install_name_tool", "-id", f"@rpath/{name}", str(path))
         run("install_name_tool", "-add_rpath", "@loader_path", str(path))
+    for path in module_paths:  # frameworks/ossl-modules/x.dylib：依赖在上一级目录
+        run("install_name_tool", "-id", f"@rpath/ossl-modules/{path.name}", str(path))
+        run("install_name_tool", "-add_rpath", "@loader_path/..", str(path))
     for path, lst in changes.items():
         for old, new in lst:
             run("install_name_tool", "-change", old, new, str(path))
     run("install_name_tool", "-add_rpath", "@executable_path/../Frameworks", str(binary))
 
+    all_libs = [*copied.values(), *module_paths]
+
     # 重新签名（ad-hoc）
-    for path in [*copied.values(), binary]:
+    for path in [*all_libs, binary]:
         run("codesign", "--force", "--sign", "-", str(path))
 
     # 校验：不能再引用任何非系统绝对路径
     bad = []
-    for path in [*copied.values(), binary]:
+    for path in [*all_libs, binary]:
         for dep in deps_of(path) + ([dylib_id(path)] if path != binary else []):
             if dep and (dep.startswith(BAD_PREFIXES) or (dep.startswith("/") and not is_system(dep))):
                 bad.append(f"{path.name}: {dep}")
@@ -156,16 +175,18 @@ def main() -> int:
         print("error: leftover non-system references:\n  " + "\n  ".join(bad), file=sys.stderr)
         return 1
 
-    print(f"bundled {len(copied)} libraries into {out}:")
-    for name in sorted(copied):
-        print(f"  {name}")
+    print(f"bundled {len(all_libs)} libraries into {out}:")
+    for p in sorted(all_libs):
+        print(f"  {p.relative_to(out)}")
 
     if args.conf:
         conf = {
             "bundle": {
                 "macOS": {
                     "signingIdentity": "-",
-                    "files": {f"Frameworks/{n}": f"frameworks/{n}" for n in sorted(copied)},
+                    "files": {
+                        f"Frameworks/{p.relative_to(out)}": f"frameworks/{p.relative_to(out)}" for p in sorted(all_libs)
+                    },
                 }
             }
         }

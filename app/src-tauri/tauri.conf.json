@@ -39,7 +39,8 @@
     ],
     "externalBin": ["binaries/rdp-mcp", "binaries/rdp-worker"],
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
     },
     "linux": {
       "deb": {

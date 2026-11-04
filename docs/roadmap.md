@@ -21,17 +21,17 @@
 
 | 里程碑 | 内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| U1 | Tauri 骨架、sidecar 启停/附着、托盘、概览页（服务状态 + MCP 接入片段） | 从 UI 启动/停止/重启服务；UI 退出后服务继续运行 | ⬜ |
-| U2 | 机器列表与编辑、测试连接、钥匙串密码、证书确认 | 不碰 YAML 完成机器管理 | ⬜ |
-| U3 | 机器详情：实时画面、接管/归还/暂停、紧急停止 | 人工接管时模型调用被拒绝 | ⬜ |
-| U4 | 活动记录、日志、设置、中英文、主题 | | ⬜ |
+| U1 | Tauri 骨架、sidecar 启停/附着、托盘、概览页（服务状态 + MCP 接入片段） | 从 UI 启动/停止/重启服务；UI 退出后服务继续运行 | ✅ 已实现；Rust 侧有单测，前端经 Playwright 在真实服务上验证；打包后的 .app 可拉起内置 sidecar |
+| U2 | 机器列表与编辑、测试连接、钥匙串密码、证书确认 | 不碰 YAML 完成机器管理 | ✅ 新增/编辑/删除/启用开关/搜索/标签过滤/测试连接/证书确认/.rdp 导入，Playwright 覆盖 |
+| U3 | 机器详情：实时画面、接管/归还/暂停、紧急停止 | 人工接管时模型调用被拒绝 | ✅ 画面帧、光标叠加、接管输入、模型调用被拒绝均由 Playwright 验证；输入法组合输入、Ctrl+Alt+Del、剪贴板发送、分辨率切换已实现，**未在真实 Windows 上验证**（示例服务器不支持剪贴板/resize） |
+| U4 | 活动记录、日志、设置、中英文、主题 | | ✅ |
 
 ## 发布
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
 | R1 | Makefile、CI（lint/test/build）、Docker 镜像 | 🟡 Makefile、CI 工作流、`packaging/Dockerfile` 已有；CI 未在 GitHub 上跑过。安装为系统服务（`service install`）不做 |
-| R2 | macOS dylib 打包、签名公证；Linux AppImage/deb；GitHub Release | ⬜ |
+| R2 | macOS dylib 打包、签名公证；Linux AppImage/deb；GitHub Release | 🟡 macOS：dylib 打包脚本 + 未签名 .dmg 已完成；签名公证、Linux AppImage/deb（仅有配置说明）、GitHub Release 未做 |
 
 建议顺序：M1 → M2 → M3 → M6（管理 API 基础部分）→ U1 → U2 → M4 → U3 → M5 → U4 → R1 → R2。
 

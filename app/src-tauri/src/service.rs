@@ -286,6 +286,12 @@ fn find_binary(name: &str, env_key: &str) -> Option<PathBuf> {
     which(name)
 }
 
+/// macOS 应用包内的 OpenSSL provider 目录：`<App>.app/Contents/Frameworks/ossl-modules`。
+fn bundled_ossl_modules() -> Option<PathBuf> {
+    let dir = exe_dir()?.join("../Frameworks/ossl-modules");
+    dir.is_dir().then(|| dir.canonicalize().unwrap_or(dir))
+}
+
 /// 是否能找到 rdp-mcp 可执行文件（设置页提示用）。
 pub fn sidecar_available() -> bool {
     find_binary("rdp-mcp", "RDP_MCP_BIN").is_some()
@@ -335,6 +341,13 @@ pub fn start() -> Result<Discovery, String> {
         cmd.arg("--config").arg(data_dir().join("configs.yaml"));
     }
     fs::create_dir_all(logs_dir()).ok();
+    // 打包的 OpenSSL provider 模块（legacy.dylib 提供 NTLM 需要的 MD4）。libcrypto 默认到编译时的
+    // Homebrew 路径找它，在没有 Homebrew 的机器上找不到会导致 NLA 登录失败，所以显式指过去。
+    if std::env::var_os("OPENSSL_MODULES").is_none() {
+        if let Some(dir) = bundled_ossl_modules() {
+            cmd.env("OPENSSL_MODULES", dir);
+        }
+    }
     let err_log = fs::OpenOptions::new()
         .create(true)
         .append(true)

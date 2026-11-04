@@ -24,3 +24,12 @@ run: all
 
 clean:
 	rm -rf build
+
+# 桌面应用：构建 sidecar（含 macOS 动态库打包）并执行 tauri build，见 docs/packaging.md §6
+.PHONY: app app-sidecars
+app:
+	scripts/build-app.sh
+
+# 只准备 sidecar 与动态库（cargo check / pnpm tauri dev 之前用）
+app-sidecars:
+	scripts/build-app.sh --sidecars-only

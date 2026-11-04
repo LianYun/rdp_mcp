@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 应用内置的 FreeRDP 动态库没有 Developer ID 签名（当前为 ad-hoc 签名）。
+       Tauri 用 hardened runtime 重新签名 sidecar，开启库校验后 dyld 会拒绝加载这些 dylib
+       （"mapping process and mapped file have different Team IDs"）。
+       正式用 Developer ID 签名所有 dylib 后可以去掉这一项。 -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
