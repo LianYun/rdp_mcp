@@ -61,6 +61,10 @@ export const zh: Record<string, string> = {
   "mcp.rotate_desc": "旧 token 立即失效，已接入的 MCP 客户端需要更新配置。",
   "mcp.rotated": "已生成新的 token",
   "mcp.copy_snippet": "复制接入片段",
+  "mcp.hint.codex_cli": "在终端执行。Codex CLI 与 Codex app 共用 ~/.codex/config.toml，执行一次两边都能用。",
+  "mcp.hint.codex_cli_token": "在终端执行。Codex 启动时从环境变量 REMOTER_MCP_TOKEN 读取 token，请把 export 那一行加到 ~/.zshrc（或 ~/.bashrc）；从程序坞启动的 Codex app 读不到 shell 环境变量，app 请改用「Codex app」标签页的配置。",
+  "mcp.hint.codex_app": "粘贴到 ~/.codex/config.toml（不存在就新建），然后重启 Codex app。Codex CLI 也会读取这份配置。",
+  "mcp.hint.claude_desktop": "粘贴到 Claude Desktop 的 claude_desktop_config.json，需要本机已安装 Node.js（npx）。",
 
   "overview.machines": "机器",
   "overview.manage": "管理机器",

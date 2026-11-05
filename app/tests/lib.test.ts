@@ -13,22 +13,42 @@ import { zh } from "@/i18n/zh";
 describe("snippets", () => {
   const url = "http://127.0.0.1:8765/mcp";
   it("builds the Claude Code command", () => {
-    expect(buildSnippet("claude-code", url, "abc")).toBe(`claude mcp add --transport http rdp ${url} --header "Authorization: Bearer abc"`);
+    expect(buildSnippet("claude-code", url, "abc")).toBe(`claude mcp add --transport http remoter ${url} --header "Authorization: Bearer abc"`);
   });
   it("omits the header when no token is set", () => {
-    expect(buildSnippet("claude-code", url, "")).toBe(`claude mcp add --transport http rdp ${url}`);
-    expect(JSON.parse(buildSnippet("json", url, "")).mcpServers.rdp.headers).toBeUndefined();
+    expect(buildSnippet("claude-code", url, "")).toBe(`claude mcp add --transport http remoter ${url}`);
+    expect(JSON.parse(buildSnippet("json", url, "")).mcpServers.remoter.headers).toBeUndefined();
   });
   it("masks the token for display", () => {
     expect(buildSnippet("claude-code", url, "secret", true)).not.toContain("secret");
     expect(buildSnippet("json", url, "secret", true)).toContain("<token>");
   });
+  it("builds the Codex CLI command", () => {
+    expect(buildSnippet("codex-cli", url, "")).toBe(`codex mcp add remoter --url ${url}`);
+    expect(buildSnippet("codex-cli", url, "abc")).toBe(
+      `export REMOTER_MCP_TOKEN=abc\ncodex mcp add remoter --url ${url} --bearer-token-env-var REMOTER_MCP_TOKEN`,
+    );
+    expect(buildSnippet("codex-cli", url, "secret", true)).not.toContain("secret");
+  });
+  it("builds the Codex config.toml block", () => {
+    expect(buildSnippet("codex-app", url, "abc")).toBe(
+      [
+        "[mcp_servers.remoter]",
+        `url = "${url}"`,
+        'http_headers = { "Authorization" = "Bearer abc" }',
+        "startup_timeout_sec = 30",
+        "tool_timeout_sec = 180",
+      ].join("\n"),
+    );
+    expect(buildSnippet("codex-app", url, "")).not.toContain("http_headers");
+    expect(buildSnippet("codex-app", url, "secret", true)).toContain("<token>");
+  });
   it("builds valid JSON snippets", () => {
     const j = JSON.parse(buildSnippet("json", url, "abc"));
-    expect(j.mcpServers.rdp).toEqual({ type: "http", url, headers: { Authorization: "Bearer abc" } });
+    expect(j.mcpServers.remoter).toEqual({ type: "http", url, headers: { Authorization: "Bearer abc" } });
     const d = JSON.parse(buildSnippet("claude-desktop", url, "abc"));
-    expect(d.mcpServers.rdp.args).toContain("mcp-remote");
-    expect(d.mcpServers.rdp.args).toContain("--allow-http");
+    expect(d.mcpServers.remoter.args).toContain("mcp-remote");
+    expect(d.mcpServers.remoter.args).toContain("--allow-http");
   });
 });
 

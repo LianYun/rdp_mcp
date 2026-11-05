@@ -46,10 +46,22 @@
    build/bin/remoter-mcp serve          # MCP 端点 http://127.0.0.1:8765/mcp
    ```
 
-4. 接入 MCP 客户端，例如 Claude Code：
+4. 接入 MCP 客户端（桌面应用的“MCP 接入”卡片可一键复制各客户端的片段，含 token）：
 
    ```bash
-   claude mcp add --transport http rdp http://127.0.0.1:8765/mcp
+   # Claude Code
+   claude mcp add --transport http remoter http://127.0.0.1:8765/mcp
+   # Codex CLI（与 Codex app 共用 ~/.codex/config.toml）
+   codex mcp add remoter --url http://127.0.0.1:8765/mcp
+   ```
+
+   Codex app 也可以直接在 `~/.codex/config.toml` 中添加：
+
+   ```toml
+   [mcp_servers.remoter]
+   url = "http://127.0.0.1:8765/mcp"
+   startup_timeout_sec = 30
+   tool_timeout_sec = 180   # 截图、run_command 可能超过默认 60 秒
    ```
 
 5. 冒烟测试（可选）：

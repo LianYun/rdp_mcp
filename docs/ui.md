@@ -43,8 +43,11 @@ Remoter 桌面应用是 remoter-mcp 服务的管理客户端：管理机器、�
 ### 4.1 概览
 - 服务状态卡片：运行中/已停止/异常，版本、PID、运行时长、运行方式；启动/停止/重启按钮。
 - MCP 接入：MCP 地址、token（遮罩 + 复制 + 重新生成），一键复制接入片段：
-  - Claude Code：`claude mcp add --transport http rdp http://127.0.0.1:8765/mcp --header "Authorization: Bearer <token>"`
-  - Claude Desktop / Cursor 等的 JSON 片段
+  - Claude Code：`claude mcp add --transport http remoter http://127.0.0.1:8765/mcp --header "Authorization: Bearer <token>"`
+  - Codex CLI：`codex mcp add remoter --url <url>`；有 token 时用 `--bearer-token-env-var REMOTER_MCP_TOKEN`，并提示把 `export REMOTER_MCP_TOKEN=...` 写入 shell 配置
+  - Codex app：`~/.codex/config.toml` 的 `[mcp_servers.remoter]` 段（`url`、`http_headers`、`startup_timeout_sec = 30`、`tool_timeout_sec = 180`），Codex CLI 与 app 共用这份配置
+  - Claude Desktop（经 `npx mcp-remote`）与通用 JSON 片段
+  - 各片段中的服务名统一为 `remoter`
 - 机器总览：每台机器的缩略图卡片（状态灯、控制模式、最近一次操作）。
 - 全局"紧急停止"按钮。
 

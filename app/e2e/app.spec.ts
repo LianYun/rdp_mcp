@@ -66,7 +66,7 @@ test("overview loads with service, MCP access and machine cards", async ({ page 
   await expect(page.getByTestId("service-status")).toHaveText("运行中");
   await expect(page.getByTestId("service-version")).not.toHaveText("-");
   await expect(page.getByTestId("mcp-url")).toContainText("127.0.0.1:18766/mcp");
-  await expect(page.getByTestId("snippet-claude-code")).toContainText("claude mcp add --transport http rdp http://127.0.0.1:18766/mcp");
+  await expect(page.getByTestId("snippet-claude-code")).toContainText("claude mcp add --transport http remoter http://127.0.0.1:18766/mcp");
   await expect(page.getByTestId("machine-card-sample")).toBeVisible();
   await expect(page.getByTestId("sidebar-dot")).toHaveAttribute("data-status", "running");
   await shot(page, "01-overview");

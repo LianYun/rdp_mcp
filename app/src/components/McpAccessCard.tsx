@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyButton } from "@/components/CopyButton";
 import { useT } from "@/i18n";
-import { buildSnippet, type SnippetKind } from "@/lib/snippets";
+import { buildSnippet, snippetHintKey, type SnippetKind } from "@/lib/snippets";
 import { useLive } from "@/stores/live";
 import { toast } from "@/stores/toast";
 
@@ -38,8 +38,10 @@ export function McpAccessCard() {
   const masked = token ? "•".repeat(Math.min(token.length, 24)) : t("mcp.no_token");
   const kinds: { key: SnippetKind; label: string }[] = [
     { key: "claude-code", label: "Claude Code" },
-    { key: "json", label: "JSON" },
+    { key: "codex-cli", label: "Codex CLI" },
+    { key: "codex-app", label: "Codex app" },
     { key: "claude-desktop", label: "Claude Desktop" },
+    { key: "json", label: "JSON" },
   ];
 
   return (
@@ -71,7 +73,7 @@ export function McpAccessCard() {
           </div>
         </div>
         <Tabs defaultValue="claude-code">
-          <TabsList>
+          <TabsList className="h-auto flex-wrap">
             {kinds.map((k) => (
               <TabsTrigger key={k.key} value={k.key}>
                 {k.label}
@@ -83,6 +85,11 @@ export function McpAccessCard() {
               <pre className="mono max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs" data-testid={`snippet-${k.key}`}>
                 {url ? buildSnippet(k.key, url, token, true) : "-"}
               </pre>
+              {snippetHintKey(k.key, token !== "") && (
+                <p className="text-xs text-muted-foreground" data-testid={`snippet-hint-${k.key}`}>
+                  {t(snippetHintKey(k.key, token !== "")!)}
+                </p>
+              )}
               <CopyButton text={url ? buildSnippet(k.key, url, token) : ""} label={t("mcp.copy_snippet")} />
             </TabsContent>
           ))}

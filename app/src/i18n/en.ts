@@ -63,6 +63,10 @@ export const en: Record<keyof typeof zh, string> = {
   "mcp.rotate_desc": "The old token stops working immediately; connected MCP clients must be updated.",
   "mcp.rotated": "New token generated",
   "mcp.copy_snippet": "Copy snippet",
+  "mcp.hint.codex_cli": "Run in a terminal. Codex CLI and the Codex app share ~/.codex/config.toml, so this works for both.",
+  "mcp.hint.codex_cli_token": "Run in a terminal. Codex reads the token from the REMOTER_MCP_TOKEN environment variable at startup, so add the export line to ~/.zshrc (or ~/.bashrc). The Codex app launched from the Dock does not see shell variables; for the app, use the \"Codex app\" tab instead.",
+  "mcp.hint.codex_app": "Paste into ~/.codex/config.toml (create it if missing), then restart the Codex app. Codex CLI reads the same file.",
+  "mcp.hint.claude_desktop": "Paste into Claude Desktop's claude_desktop_config.json. Requires Node.js (npx) on this computer.",
 
   "overview.machines": "Machines",
   "overview.manage": "Manage machines",
