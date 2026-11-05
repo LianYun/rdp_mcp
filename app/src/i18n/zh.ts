@@ -76,6 +76,8 @@ export const zh: Record<string, string> = {
 
   "emergency.button": "紧急停止",
   "emergency.done": "所有机器已暂停",
+  "emergency.resume": "全部恢复（{n} 台暂停中）",
+  "emergency.resumed": "已恢复 {n} 台机器，交还给模型",
 
   "cert.title": "确认 {machine} 的证书",
   "cert.desc": "远端提供了需要确认的证书。",
@@ -172,6 +174,7 @@ export const zh: Record<string, string> = {
   "detail.takeover": "接管",
   "detail.handback": "归还给模型",
   "detail.pause": "暂停",
+  "detail.resume": "恢复（交给模型）",
   "detail.resolution": "分辨率",
   "detail.ctrl_alt_del": "Ctrl+Alt+Del",
   "detail.save_screenshot": "保存截图",

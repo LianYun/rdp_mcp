@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Camera, ClipboardPaste, Hand, Keyboard, Link2, Link2Off, Loader2, Pause, RotateCw, Undo2 } from "lucide-react";
+import { ArrowLeft, Camera, ClipboardPaste, Hand, Keyboard, Link2, Link2Off, Loader2, Pause, Play, RotateCw, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -130,6 +130,11 @@ export default function MachineDetail() {
         ) : (
           <Button size="sm" disabled={!!busy} onClick={() => setMode("human")} data-testid="btn-takeover">
             <Hand /> {t("detail.takeover")}
+          </Button>
+        )}
+        {machine.control_mode === "paused" && (
+          <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => setMode("agent")} data-testid="btn-resume">
+            <Play /> {t("detail.resume")}
           </Button>
         )}
         <Button size="sm" variant="outline" disabled={!!busy || machine.control_mode === "paused"} onClick={() => setMode("paused")} data-testid="btn-pause">

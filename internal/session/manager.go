@@ -224,6 +224,19 @@ func (m *Manager) EmergencyStop() {
 	}
 }
 
+// ResumeAll hands every paused machine back to the agent; machines under human
+// control are left alone. Returns the names of the machines that were resumed.
+func (m *Manager) ResumeAll() []string {
+	resumed := []string{}
+	for _, s := range m.List() {
+		if s.Mode() == ModePaused {
+			s.SetMode(ModeAgent)
+			resumed = append(resumed, s.Name())
+		}
+	}
+	return resumed
+}
+
 // Shutdown disconnects all sessions.
 func (m *Manager) Shutdown() {
 	m.cancel()

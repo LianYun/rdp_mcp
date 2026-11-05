@@ -227,8 +227,10 @@ test("emergency stop pauses all machines", async ({ page }) => {
   await page.getByTestId("emergency-stop").click();
   await expect.poll(async () => (await api<{ control_mode: string }>("GET", "/machines/sample")).data.control_mode).toBe("paused");
   await expect(page.getByTestId("machine-card-sample")).toContainText("已暂停");
-  await api("PUT", "/machines/sample/control", { mode: "agent" });
+  await page.getByTestId("resume-all").click();
+  await expect.poll(async () => (await api<{ control_mode: string }>("GET", "/machines/sample")).data.control_mode).toBe("agent");
   await expect(page.getByTestId("machine-card-sample")).toContainText("模型控制");
+  await expect(page.getByTestId("resume-all")).toHaveCount(0);
 });
 
 test("activity timeline shows live tool calls and exports JSONL", async ({ page }) => {

@@ -219,3 +219,23 @@ func TestDisabledMachine(t *testing.T) {
 		t.Fatalf("create disabled: %d %v", code, out)
 	}
 }
+
+func TestEmergencyStopAndResume(t *testing.T) {
+	a, h, _, _ := newTestAPI(t)
+	if code, _ := do(t, h, "POST", "/api/v1/machines", `{"name":"b","host":"h","username":"u"}`); code != 201 {
+		t.Fatal(code)
+	}
+	if code, _ := do(t, h, "POST", "/api/v1/control/emergency-stop", ""); code != 200 {
+		t.Fatal(code)
+	}
+	b, _ := a.Mgr.Lookup("b")
+	b.SetMode(session.ModeHuman) // taken over after the stop: resume must not touch it
+	code, out := do(t, h, "POST", "/api/v1/control/resume", "")
+	if code != 200 || len(out["resumed"].([]any)) != 1 || out["resumed"].([]any)[0] != "a" {
+		t.Fatalf("%d %v", code, out)
+	}
+	aa, _ := a.Mgr.Lookup("a")
+	if aa.Mode() != session.ModeAgent || b.Mode() != session.ModeHuman {
+		t.Fatalf("modes: a=%s b=%s", aa.Mode(), b.Mode())
+	}
+}

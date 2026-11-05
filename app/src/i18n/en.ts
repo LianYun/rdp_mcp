@@ -78,6 +78,8 @@ export const en: Record<keyof typeof zh, string> = {
 
   "emergency.button": "Emergency stop",
   "emergency.done": "All machines paused",
+  "emergency.resume": "Resume all ({n} paused)",
+  "emergency.resumed": "Resumed {n} machine(s); handed back to the model",
 
   "cert.title": "Confirm certificate for {machine}",
   "cert.desc": "The remote host presented a certificate that needs confirmation.",
@@ -174,6 +176,7 @@ export const en: Record<keyof typeof zh, string> = {
   "detail.takeover": "Take over",
   "detail.handback": "Hand back to agent",
   "detail.pause": "Pause",
+  "detail.resume": "Resume (hand back to model)",
   "detail.resolution": "Resolution",
   "detail.ctrl_alt_del": "Ctrl+Alt+Del",
   "detail.save_screenshot": "Save screenshot",

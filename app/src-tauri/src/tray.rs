@@ -24,6 +24,7 @@ struct Items {
     stop: MenuItem<Wry>,
     restart: MenuItem<Wry>,
     emergency: MenuItem<Wry>,
+    resume: MenuItem<Wry>,
     quit: MenuItem<Wry>,
 }
 
@@ -48,6 +49,8 @@ fn tr(lang: &str, key: &str) -> &'static str {
         ("restart", false) => "Restart service",
         ("emergency", true) => "紧急停止（全部暂停）",
         ("emergency", false) => "Emergency stop (pause all)",
+        ("resume", true) => "全部恢复（交还给模型）",
+        ("resume", false) => "Resume all (hand back to model)",
         ("quit", true) => "退出",
         ("quit", false) => "Quit",
         ("running", true) => "服务运行中",
@@ -94,10 +97,11 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
     let stop = MenuItem::with_id(app, "stop", tr(&lang, "stop"), true, None::<&str>)?;
     let restart = MenuItem::with_id(app, "restart", tr(&lang, "restart"), true, None::<&str>)?;
     let emergency = MenuItem::with_id(app, "emergency", tr(&lang, "emergency"), true, None::<&str>)?;
+    let resume = MenuItem::with_id(app, "resume", tr(&lang, "resume"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", tr(&lang, "quit"), true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&status, &sep1, &open, &start, &stop, &restart, &emergency, &sep2, &quit])?;
+    let menu = Menu::with_items(app, &[&status, &sep1, &open, &start, &stop, &restart, &emergency, &resume, &sep2, &quit])?;
 
     TrayIconBuilder::with_id("main")
         .icon(dot_icon(Light::Stopped))
@@ -110,12 +114,13 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
             "stop" => spawn_action(app, "stop"),
             "restart" => spawn_action(app, "restart"),
             "emergency" => spawn_action(app, "emergency"),
+            "resume" => spawn_action(app, "resume"),
             "quit" => app.exit(0),
             _ => {}
         })
         .build(app)?;
 
-    *app.state::<TrayState>().0.lock().unwrap() = Some(Items { status, open, start, stop, restart, emergency, quit });
+    *app.state::<TrayState>().0.lock().unwrap() = Some(Items { status, open, start, stop, restart, emergency, resume, quit });
     Ok(())
 }
 
@@ -126,6 +131,7 @@ fn spawn_action(app: &AppHandle, action: &'static str) {
             "start" => service::start().map(|_| ()),
             "stop" => service::stop().map(|_| ()),
             "restart" => service::restart().map(|_| ()),
+            "resume" => service::resume_all(),
             _ => service::emergency_stop(),
         };
         if let Err(e) = r {
@@ -143,6 +149,7 @@ pub fn relabel(app: &AppHandle) {
         let _ = it.stop.set_text(tr(&lang, "stop"));
         let _ = it.restart.set_text(tr(&lang, "restart"));
         let _ = it.emergency.set_text(tr(&lang, "emergency"));
+        let _ = it.resume.set_text(tr(&lang, "resume"));
         let _ = it.quit.set_text(tr(&lang, "quit"));
     }
 }
@@ -171,6 +178,7 @@ fn apply(app: &AppHandle, light: Light, connected: Option<usize>) {
         let _ = it.stop.set_enabled(running);
         let _ = it.restart.set_enabled(running);
         let _ = it.emergency.set_enabled(running);
+        let _ = it.resume.set_enabled(running);
     }
 }
 

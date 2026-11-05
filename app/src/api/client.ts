@@ -122,6 +122,7 @@ export class ApiClient {
   setControl = (name: string, mode: "agent" | "human" | "paused") =>
     this.json<MachineInfo>("PUT", `/machines/${encodeURIComponent(name)}/control`, { mode });
   emergencyStop = () => this.json<{ status: string }>("POST", "/control/emergency-stop");
+  resumeAll = () => this.json<{ status: string; resumed: string[] }>("POST", "/control/resume");
   answerCert = (name: string, accept: "once" | "always" | "reject") =>
     this.json<unknown>("POST", `/machines/${encodeURIComponent(name)}/cert`, { accept });
   trust = (name: string) => this.json<unknown>("POST", `/machines/${encodeURIComponent(name)}/trust`);

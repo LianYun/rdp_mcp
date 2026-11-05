@@ -82,6 +82,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/machines/{name}/trust", a.auth(a.trust))
 	mux.Handle("GET /api/v1/machines/{name}/screenshot", a.auth(a.screenshot))
 	mux.Handle("POST /api/v1/control/emergency-stop", a.auth(a.emergencyStop))
+	mux.Handle("POST /api/v1/control/resume", a.auth(a.resumeAll))
 	mux.Handle("GET /api/v1/events", a.auth(a.events))
 	mux.Handle("GET /api/v1/audit", a.auth(a.audit))
 	return a.cors(mux)
@@ -245,6 +246,10 @@ func (a *API) trust(w http.ResponseWriter, r *http.Request) {
 func (a *API) emergencyStop(w http.ResponseWriter, r *http.Request) {
 	a.Mgr.EmergencyStop()
 	writeJSON(w, 200, map[string]string{"status": "all machines paused"})
+}
+
+func (a *API) resumeAll(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"status": "paused machines handed back to the agent", "resumed": a.Mgr.ResumeAll()})
 }
 
 func (a *API) screenshot(w http.ResponseWriter, r *http.Request) {

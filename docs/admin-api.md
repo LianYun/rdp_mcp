@@ -54,6 +54,7 @@
 | POST | `/machines/{name}/connect` · `/disconnect` · `/reconnect` | ✅ 返回 MachineInfo；连接失败 502 |
 | PUT | `/machines/{name}/control` | ✅ `{mode: agent\|human\|paused}` |
 | POST | `/control/emergency-stop` | ✅ 全部机器进入 `paused` |
+| POST | `/control/resume` | ✅ 所有 `paused` 的机器恢复为 `agent`（`human` 接管中的不变），返回 `{status, resumed: [机器名]}` |
 | GET | `/machines/{name}/screenshot?max_width=&format=png\|jpeg` | ✅ 单张截图（图片二进制，头 `X-Screen-Size: WxH`），不改变模型的坐标系 |
 | POST | `/machines/{name}/cert` | ✅ `{accept: once\|always\|reject}` 回应待确认证书（见 `pending_cert` / `cert_verify` 事件）；无待确认时 409。未在 2 分钟内回应则自动拒绝 |
 | POST | `/machines/{name}/trust` | ✅ 忘记已记录的证书指纹，下次连接重新信任（同 `remoter-mcp trust`） |

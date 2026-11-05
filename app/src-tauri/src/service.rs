@@ -454,6 +454,19 @@ pub fn emergency_stop() -> Result<(), String> {
     }
 }
 
+pub fn resume_all() -> Result<(), String> {
+    let d = discover();
+    let (Some(listen), Some(tok)) = (d.listen, d.admin_token) else {
+        return Err("service not running".into());
+    };
+    let r = http(&listen, "POST", "/api/v1/control/resume", Some(&tok), Duration::from_secs(3))?;
+    if r.status / 100 == 2 {
+        Ok(())
+    } else {
+        Err(format!("HTTP {}", r.status))
+    }
+}
+
 /// 机器概况（托盘用）：(已连接数, 是否有失败/暂停)。
 pub fn machine_summary(d: &Discovery) -> Option<(usize, bool)> {
     let (listen, tok) = (d.listen.as_ref()?, d.admin_token.as_ref()?);
