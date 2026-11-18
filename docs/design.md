@@ -1,6 +1,6 @@
 # Remoter 技术方案
 
-> 状态：v0.4（2026-11-04）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
+> 状态：v0.6（2026-11-13）。本文档随实现持续更新，架构决策变化先改这里（§3 决策表 + §14 变更记录）。
 >
 > 命名（D20）：产品与桌面应用显示名 `Remoter`（`Remoter.app`）；技术名称一律小写：bundle id `com.lianyun.remoter`；服务 / CLI `remoter-mcp`；worker `remoter-worker`；数据目录 `~/.remoter`；环境变量 `REMOTER_MCP_*`。
 >
@@ -10,14 +10,14 @@
 
 ## 1. 目标与范围
 
-基于 FreeRDP 实现一个 MCP 服务，让大模型通过 MCP 控制多台 Windows 电脑，并提供桌面管理界面。
+基于 FreeRDP 实现一个 MCP 服务，让大模型通过 MCP 控制多台 Windows 电脑，并提供桌面管理界面。macOS 被控端经系统自带的屏幕共享（VNC）+ 远程登录（SSH）接入（D21，§5a）。
 
 | 目标 | 说明 |
 |---|---|
 | 功能全面 | 截图、鼠标、键盘、剪贴板、分辨率、命令执行、文件传输、会话管理 |
 | 接口简单 | 约 9 个 MCP 工具，统一 `machine + action` 风格 |
 | HTTP 传输 | MCP Streamable HTTP，端点 `/mcp` |
-| 多机器 | `.remoter/configs.yaml` 声明，或在 UI 中管理 |
+| 多机器 | `.remoter/configs.yaml` 声明，或在 UI 中管理；Windows（RDP）与 macOS（VNC + SSH）可混用 |
 | 部署平台 | 服务：macOS、Linux（含无显示器服务器 / Docker）；UI：macOS、Linux 桌面 |
 | 桌面 UI | Tauri 应用：管理机器、启停/重启服务、实时查看与人工接管、查看模型操作记录 |
 | 可独立运行 | 服务不依赖 UI，CLI 即可运行；UI 只是服务的一个管理客户端 |
@@ -68,6 +68,7 @@
 | D18 | 系统 / 窗口 / UIA 能力用预设临时 PowerShell 脚本实现，经 `run_command` 通道执行 | 复用现有零常驻通道；输出由脚本结构化并限制条数，避免撑爆上下文 | 每类一个专用工具（工具数膨胀） |
 | D19 | 长任务通过 `run_command detach` + `job` 工具异步执行 | 复用 jobs 目录的 .out/.err/.code 文件，无需新机制；模型可边跑安装边操作界面 | 同步阻塞直到超时 |
 | D20 | 全面更名为 **remoter**：应用显示名 `Remoter`（`Remoter.app`，bundle id `com.lianyun.remoter`），其余技术名称小写、`remoter-mcp`、`remoter-worker`、`~/.remoter`、`REMOTER_MCP_*`、钥匙串服务名 `remoter`；Go module 路径暂不变 | 名称统一；首次启动自动从 `~/.rdp_mcp` 复制配置、`.env`、`known_hosts`，钥匙串回退读取旧服务名，用户无需手动迁移 | 只改对外显示名（技术名与产品名不一致） |
+| D21 | 支持 **macOS 被控端**：`protocol: vnc` 的机器经系统自带“屏幕共享”（RFB，Apple ARD 账号认证）取画面与输入，经“远程登录”（SSH）执行命令、传文件、读写剪贴板和输入文字；VNC 客户端用纯 Go 实现，以 `remoter-mcp vnc-worker` 子进程运行并复用 worker IPC | Mac 端零安装；实测 Apple VNC 服务端不支持标准剪贴板、光标形状和改分辨率，ASCII 按键会被中文输入法截获，而 SSH 能可靠完成这些；纯 Go 无新增 C 依赖与打包；独立进程保留崩溃隔离，Session 层几乎不变 | libvncclient C worker（多一套打包依赖、收益小）；Mac 端常驻 agent（需逐台授予 TCC 权限）；纯 SSH + `screencapture`（被 TCC 拦截） |
 
 ## 4. 总体架构
 
@@ -123,6 +124,34 @@
 
 代码规模预估 1500–2500 行。协议见 [worker-ipc.md](worker-ipc.md)。
 
+## 5a. macOS 被控端：remoter-mcp vnc-worker（Go）
+
+`protocol: vnc` 的机器不使用 `remoter-worker`，而是由服务启动自身的隐藏子命令 `remoter-mcp vnc-worker --ipc <socket>`（`internal/vnc`）。它实现与 C worker 相同的 IPC 协议（[worker-ipc.md](worker-ipc.md)），因此 Session 的状态机、重连、控制锁、截图与坐标换算全部复用。
+
+Mac 端前提：系统设置 → 通用 → 共享，打开“屏幕共享”（或“远程管理”）与“远程登录”，并允许配置中的账号访问。一套账号密码同时用于 VNC 与 SSH。
+
+**VNC（画面与输入）**
+
+1. 握手：RFB 3.8；认证优先 Apple ARD（security type 30：DH 协商 → MD5 → AES-128-ECB 加密账号密码），其次 VNC 密码（type 2）、无认证（type 1）。共享模式连接（不踢掉其他观看者）。
+2. 像素格式 32bpp BGRX；编码 ZRLE（主）、CopyRect、Raw，伪编码 DesktopSize / LastRect。收到一次更新后立即再请求增量更新，帧缓冲始终保持最新；`dirty_seq` / `idle_ms` 由更新驱动。
+3. 鼠标：RDP 指针标志翻译为 RFB 按钮掩码（左 1、中 2、右 4、滚轮 4–7 号按钮、`x1` = 8 号按钮）。
+4. 键盘：扫描码翻译为 X11 keysym（美式布局）；`win` → `Super_L`，在 Mac 上即 Command；`alt` → Option。`unicode`：非 ASCII 字符用 Unicode keysym（`0x01000000 | 码点`，绕过输入法直接上屏），ASCII 用普通 keysym（会经过当前输入法）。
+5. 光标：Apple 服务端既不发送光标形状、也不把光标画进帧缓冲；worker 上报最后一次发送的指针位置，截图时画默认箭头。物理鼠标的移动不可见。
+6. 不支持：剪贴板消息（Apple 只对自家客户端同步剪贴板）、改分辨率、Ctrl+Alt+Del。
+
+**SSH（命令、文件、剪贴板、文字输入）**
+
+服务端用 `golang.org/x/crypto/ssh` 为每台 Mac 维护一个 SSH 连接（按需建立，会话断开时关闭，失败自动重拨一次）。主机密钥按 `cert` 策略校验：默认 TOFU，指纹记录在 `known_hosts` 中键为 `ssh:<host>:<port>`。
+
+| 能力 | 实现 |
+|---|---|
+| `run_command` | 远端 `~/Library/Caches/remoter/jobs/<id>.*`：上传用户脚本与 runner，runner 以登录 shell（`zsh -l` 等，PATH 与终端一致）后台执行、独立进程组、自带超时，写 `.out/.err/.pid/.code`；服务轮询 `.code`。同步与 `detach` 共用一套，`job cancel` 用 `kill -- -<pgid>`。不依赖图形桌面 |
+| `file` | `cat` 流式上传/下载，`stat`/`find` 列目录与搜索，路径为 POSIX，支持 `~` |
+| `clipboard` | `pbcopy` / `pbpaste`（`LANG=en_US.UTF-8`），仅文本 |
+| `keyboard type` | 默认“粘贴输入”：保存原剪贴板文本 → `pbcopy` 目标文字 → Cmd+V → 恢复；`\n`、`\t` 按 Return / Tab 键发送。实测中文、符号、全角/半角在拼音输入法下均正确。SSH 不可用或屏幕处于锁定/登录窗口（`ioreg` 检测）时回退为按键输入（锁屏密码框为安全输入，输入法不介入） |
+
+不连接 VNC 也能用的工具：`run_command`、`job`、`file`、`clipboard`（仍受控制模式约束）。
+
 ## 6. remoter-mcp 服务（Go）
 
 ### 6.1 包结构
@@ -139,7 +168,8 @@
 | `internal/events` | 进程内事件总线（状态变化、工具调用、日志） |
 | `internal/imaging` | 缩放/裁剪/编码、光标合成、坐标换算 |
 | `internal/keymap` | 键名 → 扫描码 |
-| `internal/remote` | `run_command`、`file`：脚本生成、共享目录、结果轮询 |
+| `internal/remote` | `run_command`、`file`：Windows 经共享目录 + 运行对话框，macOS 经 SSH（§5a）；任务登记与结果轮询 |
+| `internal/vnc` | macOS 被控端的 RFB 客户端（ARD 认证、ZRLE 解码、keysym 映射）与 `vnc-worker` 子命令（§5a） |
 | `internal/audit` | 审计日志（JSONL，按天滚动，可选保存截图缩略图） |
 | `internal/runtime` | 单实例锁、运行时文件、优雅退出 |
 
@@ -154,6 +184,7 @@ remoter-mcp machine test <name>    # 测试连接并保存一张截图
 remoter-mcp secret set <name>      # 交互输入密码写入钥匙串
 remoter-mcp trust <name>           # 忘记已记录的证书指纹，下次连接重新信任
 remoter-mcp version
+remoter-mcp vnc-worker --ipc SOCK   # 内部使用：由服务为 protocol: vnc 的机器启动
 ```
 
 已实现（v0.4）：`serve`、`status`、`stop`、`check-config`（含密码可解析性检查）、`secret set|delete`、`trust`、`version`。
@@ -162,7 +193,9 @@ remoter-mcp version
 开发辅助：
 - `go run ./tools/smoke -url ... -machine <name> [-input] [-run "hostname"] [-call <tool> -args '<json>']`：最小 MCP 客户端，用于冒烟测试。
 - `go run ./tools/wsprobe -url ... -token <admin> -machine <name>`：实时画面 WebSocket 探针。
+- `go run ./tools/vncprobe -host <mac> -user <账号> info|input|input2|clip|ssh|all`：macOS 屏幕共享 / SSH 能力探针（密码从钥匙串 `remoter-probe` 读取），D21 的实测依据。
 - `internal/testutil/fakeworker`：测试二进制扮演 remoter-worker（模拟桌面与运行对话框），用于会话 / MCP 工具 / run_command 的自动化测试。
+- `internal/vnc/vnctest`（假 RFB 服务端：ARD / VNC 密码认证、全部 ZRLE 子编码、记录输入事件）与 `internal/testutil/fakessh`（假 SSH 服务端，在本机执行命令）：macOS 路径的自动化测试。
 
 ### 6.3 运行时与单实例
 
@@ -281,6 +314,7 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 4. RDP 断开后远端会话锁定，需保持连接（自动重连 + 保活）。
 5. `run_command` 依赖 GUI 状态。
 6. 实时画面为 JPEG 帧流，高帧率高分辨率下 CPU 占用较高（默认 10fps）。
+7. macOS：屏幕共享控制的是物理控制台（与本地用户共用屏幕）；无显示器的 Mac mini 需 HDMI 欺骗器或虚拟显示器才有正常分辨率；开启 FileVault 的 Mac 重启后停在解锁界面，VNC 与 SSH 都不可用；不支持改分辨率；截图中的光标是服务端合成的（只反映经服务发出的移动）；`keyboard type` 会短暂占用剪贴板（只恢复文本内容）；SSH 会话默认无权访问“桌面/文稿/下载”等 TCC 保护目录，需在远程登录设置中开启“允许远程用户完全访问磁盘”。
 
 ## 12. 测试策略
 
@@ -325,3 +359,4 @@ remoter/
 | 2026-11-04 | v0.4.2 | 部署到 172.23.4.162 时发现两处服务抢同一台 Windows 会互相踢、且快速重试无次数限制：快速重试只做一次；服务器以“被其他连接接管/注销/管理员断开”（ERRINFO 0x1/0x2/0x5/0xB/0xC）结束会话时不再自动重连，状态置为 failed 并说明原因，下次工具调用再连回 |
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `remoter-mcp trust` 命令 |
+| 2026-11-13 | v0.6 | 支持 macOS 被控端（D21，§5a）：`protocol: vnc`，VNC（Go 实现的 `remoter-mcp vnc-worker`，复用 worker IPC）+ SSH（命令、文件、剪贴板、粘贴输入）。先用 `tools/vncprobe` 在 macOS 27 上实测：ARD 认证、ZRLE、坐标 1:1、Command = `Super_L` 可用；剪贴板消息、光标伪编码不可用；拼音输入法会改写 ASCII 按键。未找到 `remoter-worker` 时服务不再拒绝启动（只影响 RDP 机器） |

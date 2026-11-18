@@ -1,6 +1,6 @@
 # Remoter
 
-基于 [FreeRDP](https://github.com/FreeRDP/FreeRDP) 的 Windows 远程控制 MCP 服务：让大模型通过 MCP（Streamable HTTP）控制多台 Windows 电脑，并提供 Tauri 桌面管理应用。
+基于 [FreeRDP](https://github.com/FreeRDP/FreeRDP) 的 Windows 远程控制 MCP 服务：让大模型通过 MCP（Streamable HTTP）控制多台 Windows 电脑，并提供 Tauri 桌面管理应用。macOS 电脑经系统自带的屏幕共享（VNC）+ 远程登录（SSH）接入（`protocol: vnc`）。
 
 > 状态：v0.4。服务端与桌面应用均可用；部分功能待真实 Windows 验证。进度见 [docs/roadmap.md](docs/roadmap.md)。
 
@@ -71,6 +71,8 @@
    ```
 
 Windows 端要求：专业版/企业版/服务器版，已开启远程桌面。Windows 端不需要安装任何东西。
+
+macOS 端要求：系统设置 → 通用 → 共享 中打开“屏幕共享”和“远程登录”，配置里写 `protocol: vnc`（见 [docs/configuration.md](docs/configuration.md)）。Mac 端同样不需要安装任何东西；只控制 Mac 时不需要 `remoter-worker`。
 
 ## MCP 工具
 

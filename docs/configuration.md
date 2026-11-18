@@ -15,6 +15,18 @@ machines:
 
 然后运行 `remoter-mcp check-config` 检查，`remoter-mcp serve` 启动。
 
+macOS 机器加 `protocol: vnc`（见下文“macOS 机器”）：
+
+```yaml
+  - name: mac1
+    protocol: vnc
+    host: 192.168.1.40
+    username: alice            # Mac 登录账号（短名）
+    password: ${MAC1_PASSWORD} # 与 Windows 机器相同：写在 .env 或环境变量里
+```
+
+Mac 机器的密码写法与 Windows 完全相同（下文四种写法都可用）。服务部署在 Linux 服务器上时通常没有钥匙串，用 `.env` + `${ENV}` 即可。
+
 ## 查找顺序
 
 1. 命令行 `--config <path>`
@@ -52,7 +64,7 @@ machines:
 | screenshot_max_width | 1280 | 否 | 截图缩放后的长边像素 |
 | draw_cursor | true | 否 | 截图中合成鼠标指针 |
 | data_dir | `~/.remoter` | 是 | 运行时文件、共享目录、known_hosts、日志、审计 |
-| worker_path | 自动 | 是 | `remoter-worker` 路径；默认依次查找：与 `remoter-mcp` 同目录、`../worker/build/`、`PATH` |
+| worker_path | 自动 | 是 | `remoter-worker` 路径；默认依次查找：与 `remoter-mcp` 同目录、`../worker/build/`、`PATH`。找不到时服务仍可启动，只是 RDP 机器无法连接（macOS 机器不需要它） |
 | log_level | `info` | 否 | `debug`/`info`/`warn`/`error`；`debug` 时 worker 也输出 FreeRDP 调试日志 |
 | audit.enabled | true | 是 | 记录工具调用到 `<data_dir>/audit/YYYY-MM-DD.jsonl` |
 | audit.retention_days | 7 | 是 | 审计日志保留天数 |
@@ -65,7 +77,7 @@ machines:
 ### defaults（被每台机器继承，机器上同名字段覆盖）
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| port | 3389 | |
+| port | 3389 | 仅 RDP 机器继承；macOS 机器默认 5900 |
 | width / height | 1920 / 1080 | 远程桌面分辨率（200–8192） |
 | security | `auto` | `auto` / `nla` / `tls` / `rdp` |
 | cert | `tofu` | `tofu`：首次连接信任并记录指纹，之后指纹变化则拒绝；`ignore`：不校验；`fingerprint`：必须等于 `cert_fingerprint` |
@@ -87,13 +99,27 @@ machines:
 | description | 否 | 给模型看的说明，建议写清用途 |
 | tags | 否 | 分组标签 |
 | enabled | 否 | 默认 true；false 时对 MCP 不可见 |
-| cert_fingerprint | 否 | `cert: fingerprint` 时使用，格式 `AB:CD:...` 或 `sha256:AB:CD:...` |
+| cert_fingerprint | 否 | `cert: fingerprint` 时使用，格式 `AB:CD:...` 或 `sha256:AB:CD:...`；macOS 机器填 SSH 主机密钥的 SHA256 指纹（`SHA256:base64…`，即 `ssh-keyscan host \| ssh-keygen -lf -` 的输出） |
+| protocol | 否 | `rdp`（默认，Windows）\| `vnc`（macOS：屏幕共享 + SSH） |
+| ssh_port | 否 | 仅 `vnc`：SSH 端口，默认 22 |
+| enable_ssh | 否 | 仅 `vnc`：默认 true；false 时 `run_command`/`job`/`file`/`clipboard` 不可用，`keyboard type` 改为按键输入 |
 | 以及 defaults 中任意字段 | 否 | 覆盖默认值 |
+
+## macOS 机器（protocol: vnc）
+
+Mac 上打开 系统设置 → 通用 → 共享 中的“屏幕共享”（或“远程管理”）和“远程登录”，并允许该账号访问。同一套 `username` / `password`（Mac 账号）用于 VNC（Apple 账号认证）与 SSH。
+
+- `port` 默认 5900，**不继承** `defaults.port`。
+- `width`、`height`、`security`、`domain`、`enable_drive`、`enable_clipboard`、`disable_wallpaper` 对 Mac 无效（分辨率由 Mac 决定）。
+- `cert` 策略作用于 SSH 主机密钥（VNC 本身没有服务器身份校验）。
+- `auto_connect`、`idle_disconnect`、`reconnect_attempts`、`enabled`、`tags` 等照常生效。
+- 无显示器的 Mac mini 需 HDMI 欺骗器或虚拟显示器；开启 FileVault 的 Mac 重启后需先在本地解锁。
+- macOS 隐私保护（TCC）默认禁止 SSH 会话访问“桌面”“文稿”“下载”等目录（报 `Operation not permitted`）。需要时在“远程登录”旁的 ⓘ 中勾选“允许远程用户完全访问磁盘”。
 
 ## 证书
 
-- 指纹记录在 `<data_dir>/known_hosts`。
-- Windows 重装或证书更换后连接会被拒绝，错误信息里有新指纹。确认无误后执行 `remoter-mcp trust <machine>`，下次连接重新信任。
+- 指纹记录在 `<data_dir>/known_hosts`（Mac 的 SSH 主机密钥记为 `ssh:<host>:<port>`）。
+- Windows 重装或证书更换（Mac 重装或 SSH 主机密钥变化）后连接会被拒绝，错误信息里有新指纹。确认无误后执行 `remoter-mcp trust <machine>`，下次连接重新信任。
 
 ## 运行时目录（data_dir）
 

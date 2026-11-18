@@ -1,8 +1,10 @@
 // 机器编辑表单 <-> 管理 API 的映射（PUT 整体替换语义见 docs/admin-api.md）。
 
-import type { CertPolicy, MachineConfig, MachineDef, Security } from "@/api/types";
+import type { CertPolicy, MachineConfig, MachineDef, Protocol, Security } from "@/api/types";
 
 export interface MachineForm {
+  /** rdp = Windows，vnc = macOS。 */
+  protocol: Protocol;
   name: string;
   description: string;
   tags: string; // 逗号分隔
@@ -25,9 +27,12 @@ export interface MachineForm {
   enable_drive: "" | "true" | "false";
   enable_clipboard: "" | "true" | "false";
   disable_wallpaper: "" | "true" | "false";
+  ssh_port: string;
+  enable_ssh: "" | "true" | "false";
 }
 
 export const emptyForm = (): MachineForm => ({
+  protocol: "rdp",
   name: "",
   description: "",
   tags: "",
@@ -49,6 +54,8 @@ export const emptyForm = (): MachineForm => ({
   enable_drive: "",
   enable_clipboard: "",
   disable_wallpaper: "",
+  ssh_port: "",
+  enable_ssh: "",
 });
 
 const tri = (v: boolean | undefined): "" | "true" | "false" => (v === undefined ? "" : v ? "true" : "false");
@@ -58,6 +65,7 @@ const str = (v: number | undefined) => (v === undefined ? "" : String(v));
 export function formFromConfig(m: MachineConfig): MachineForm {
   return {
     ...emptyForm(),
+    protocol: m.protocol === "vnc" ? "vnc" : "rdp",
     name: m.name,
     description: m.description ?? "",
     tags: (m.tags ?? []).join(", "),
@@ -77,6 +85,8 @@ export function formFromConfig(m: MachineConfig): MachineForm {
     enable_drive: tri(m.enable_drive),
     enable_clipboard: tri(m.enable_clipboard),
     disable_wallpaper: tri(m.disable_wallpaper),
+    ssh_port: str(m.ssh_port),
+    enable_ssh: tri(m.enable_ssh),
   };
 }
 
@@ -98,8 +108,12 @@ export function validateForm(f: MachineForm): Record<string, string> {
   if (!f.username.trim()) e.username = "form.err.user_required";
   const intIn = (v: string, lo: number, hi: number) => v === "" || (/^\d+$/.test(v) && Number(v) >= lo && Number(v) <= hi);
   if (!intIn(f.port, 1, 65535)) e.port = "form.err.port";
-  if (!intIn(f.width, 200, 8192)) e.width = "form.err.size";
-  if (!intIn(f.height, 200, 8192)) e.height = "form.err.size";
+  if (f.protocol === "vnc") {
+    if (!intIn(f.ssh_port, 1, 65535)) e.ssh_port = "form.err.port";
+  } else {
+    if (!intIn(f.width, 200, 8192)) e.width = "form.err.size";
+    if (!intIn(f.height, 200, 8192)) e.height = "form.err.size";
+  }
   if (!intIn(f.reconnect_attempts, 0, 1000)) e.reconnect_attempts = "form.err.number";
   if (f.idle_disconnect !== "" && f.idle_disconnect !== "0" && !/^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/.test(f.idle_disconnect))
     e.idle_disconnect = "form.err.duration";
@@ -114,22 +128,30 @@ export function validateForm(f: MachineForm): Record<string, string> {
 export function toMachineDef(f: MachineForm, opts: { editing?: string } = {}): MachineDef {
   const d: MachineDef = { name: opts.editing ?? f.name, host: f.host.trim(), username: f.username.trim(), enabled: f.enabled };
   if (opts.editing && f.name !== opts.editing) d.new_name = f.name;
+  const mac = f.protocol === "vnc";
+  if (mac) d.protocol = "vnc";
   if (f.description.trim()) d.description = f.description.trim();
   const tags = parseTags(f.tags);
   if (tags.length) d.tags = tags;
-  if (f.domain.trim()) d.domain = f.domain.trim();
   if (f.port) d.port = Number(f.port);
-  if (f.width) d.width = Number(f.width);
-  if (f.height) d.height = Number(f.height);
-  if (f.security) d.security = f.security;
   if (f.cert) d.cert = f.cert;
   if (f.cert === "fingerprint" && f.cert_fingerprint.trim()) d.cert_fingerprint = f.cert_fingerprint.trim();
   if (f.auto_connect) d.auto_connect = f.auto_connect === "true";
   if (f.idle_disconnect) d.idle_disconnect = f.idle_disconnect;
   if (f.reconnect_attempts) d.reconnect_attempts = Number(f.reconnect_attempts);
-  if (f.enable_drive) d.enable_drive = f.enable_drive === "true";
-  if (f.enable_clipboard) d.enable_clipboard = f.enable_clipboard === "true";
-  if (f.disable_wallpaper) d.disable_wallpaper = f.disable_wallpaper === "true";
+  if (mac) {
+    // macOS：RDP 专属字段不发送（PUT 整体替换会把它们从配置中移除）
+    if (f.ssh_port) d.ssh_port = Number(f.ssh_port);
+    if (f.enable_ssh) d.enable_ssh = f.enable_ssh === "true";
+  } else {
+    if (f.domain.trim()) d.domain = f.domain.trim();
+    if (f.width) d.width = Number(f.width);
+    if (f.height) d.height = Number(f.height);
+    if (f.security) d.security = f.security;
+    if (f.enable_drive) d.enable_drive = f.enable_drive === "true";
+    if (f.enable_clipboard) d.enable_clipboard = f.enable_clipboard === "true";
+    if (f.disable_wallpaper) d.disable_wallpaper = f.disable_wallpaper === "true";
+  }
   if (f.clearPassword) {
     d.password = "";
     d.password_cmd = "";

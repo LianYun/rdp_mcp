@@ -150,6 +150,7 @@ func machineSpecs(m Machine) []entrySpec {
 		{"name", true, m.Name},
 		{"description", m.Description != "", m.Description},
 		{"host", true, m.Host},
+		{"protocol", m.Protocol != "", m.Protocol},
 		{"username", true, m.Username},
 		{"domain", m.Domain != "", m.Domain},
 		{"cert_fingerprint", m.CertFingerprint != "", m.CertFingerprint},
@@ -158,6 +159,7 @@ func machineSpecs(m Machine) []entrySpec {
 		{"height", m.Height != 0, m.Height},
 		{"security", m.Security != "", m.Security},
 		{"cert", m.Cert != "", m.Cert},
+		{"ssh_port", m.SSHPort != 0, m.SSHPort},
 	}
 	opt := func(key string, b *bool) {
 		var v any
@@ -167,6 +169,7 @@ func machineSpecs(m Machine) []entrySpec {
 		sp = append(sp, entrySpec{key, b != nil, v})
 	}
 	opt("enabled", m.Enabled)
+	opt("enable_ssh", m.EnableSSH)
 	opt("auto_connect", m.AutoConnect)
 	opt("enable_drive", m.EnableDrive)
 	opt("enable_clipboard", m.EnableClipboard)

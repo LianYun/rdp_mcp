@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/LianYun/rdp_mcp/internal/session"
@@ -43,6 +44,7 @@ type detached struct {
 	state     string
 	exitCode  *int
 	cancelled bool
+	pidCache  atomic.Int64
 }
 
 var (
@@ -64,16 +66,7 @@ func Detach(o *session.Ops, command, shell string, timeout time.Duration) (*JobI
 		j.cleanup()
 		return nil, err
 	}
-	d := &detached{job: j, command: command, shell: shellName(shell), started: time.Now(), state: "running"}
-	jobsMu.Lock()
-	jobs[j.ID] = d
-	pruneLocked(j.Machine)
-	jobsMu.Unlock()
-
-	release := s.HoldIdle()
-	go watch(s, d, release)
-	info := d.info()
-	return &info, nil
+	return register(s, j, command, shellName(shell), s.HoldIdle()), nil
 }
 
 func shellName(s string) string {
@@ -81,6 +74,18 @@ func shellName(s string) string {
 		return "cmd"
 	}
 	return "powershell"
+}
+
+// register records a started job and watches it until it finishes.
+func register(s *session.Session, j *job, command, shell string, release func()) *JobInfo {
+	d := &detached{job: j, command: command, shell: shell, started: time.Now(), state: "running"}
+	jobsMu.Lock()
+	jobs[j.ID] = d
+	pruneLocked(j.Machine)
+	jobsMu.Unlock()
+	go watch(s, d, release)
+	info := d.info()
+	return &info
 }
 
 // watch polls for completion, then releases the idle hold and publishes a job event.
@@ -117,7 +122,7 @@ func refresh(d *detached) bool {
 	if d.state != "running" {
 		return true
 	}
-	b, err := os.ReadFile(d.local(".code"))
+	b, err := d.read(".code")
 	if err != nil || len(bytes.TrimSpace(b)) == 0 {
 		return false
 	}
@@ -138,11 +143,15 @@ func refresh(d *detached) bool {
 }
 
 func (d *detached) pid() int {
-	b, err := os.ReadFile(d.local(".pid"))
+	if n := d.pidCache.Load(); n > 0 {
+		return int(n)
+	}
+	b, err := d.read(".pid")
 	if err != nil {
 		return 0
 	}
 	n, _ := strconv.Atoi(strings.TrimSpace(decodeOutput(b)))
+	d.pidCache.Store(int64(n))
 	return n
 }
 
@@ -243,8 +252,8 @@ func JobOutputTail(machine, id string, maxBytes int) (*JobOutput, error) {
 	jobsMu.Lock()
 	out := &JobOutput{JobInfo: d.info()}
 	jobsMu.Unlock()
-	out.Stdout = readTail(d.local(".out"), maxBytes)
-	out.Stderr = readTail(d.local(".err"), maxBytes)
+	out.Stdout = d.tail(".out", maxBytes)
+	out.Stderr = d.tail(".err", maxBytes)
 	return out, nil
 }
 

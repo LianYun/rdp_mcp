@@ -114,6 +114,8 @@ export class ApiClient {
     this.json<{ status: string }>("DELETE", `/machines/${encodeURIComponent(name)}${deleteSecret ? "?delete_secret=true" : ""}`);
   putSecret = (name: string, password: string) =>
     this.json<unknown>("PUT", `/machines/${encodeURIComponent(name)}/secret`, { password });
+  /** 用表单中的完整定义试连，不保存（POST /machines/test）。 */
+  testDefinition = (def: MachineDef) => this.json<TestResult>("POST", "/machines/test", def);
   testMachine = (name: string, req: TestRequest = {}) =>
     this.json<TestResult>("POST", `/machines/${encodeURIComponent(name)}/test`, req);
   connect = (name: string) => this.json<MachineInfo>("POST", `/machines/${encodeURIComponent(name)}/connect`);

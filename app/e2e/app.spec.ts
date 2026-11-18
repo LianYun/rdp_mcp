@@ -86,6 +86,10 @@ test("machine create / edit / test connection / delete", async ({ page }) => {
   await page.getByTestId("f-security").selectOption("tls");
   await page.getByTestId("f-tags").fill("e2e, tmp");
   await page.getByTestId("f-description").fill("created by playwright");
+  // 未保存也能测试连接（POST /machines/test），测试不会关闭表单
+  await page.getByTestId("f-test").click();
+  await expect(page.getByTestId("test-result")).toHaveAttribute("data-ok", "true", { timeout: 60_000 });
+  await expect(page.getByTestId("machine-form")).toBeVisible();
   await page.getByTestId("f-save").click();
   await expect(page.getByTestId("row-e2e-pc")).toBeVisible();
   await expect(page.getByTestId("row-e2e-pc")).toContainText("tmp");

@@ -75,12 +75,14 @@ type Client struct {
 	Hello      struct {
 		Version  string `json:"version"`
 		FreeRDP  string `json:"freerdp"`
+		Backend  string `json:"backend"` // "vnc" for the macOS worker, empty for remoter-worker
 		Protocol int    `json:"protocol"`
 	}
 }
 
 type StartOptions struct {
 	WorkerPath string
+	Args       []string // arguments before --ipc (e.g. the vnc-worker subcommand)
 	SocketDir  string
 	Name       string
 	LogFile    string // worker stdout/stderr destination
@@ -107,7 +109,7 @@ func Start(ctx context.Context, o StartOptions) (*Client, error) {
 	defer ln.Close()
 	_ = os.Chmod(sock, 0o600)
 
-	cmd := exec.Command(o.WorkerPath, "--ipc", sock)
+	cmd := exec.Command(o.WorkerPath, append(append([]string{}, o.Args...), "--ipc", sock)...)
 	cmd.Env = append(os.Environ(), o.Env...)
 	var logf *os.File
 	if o.LogFile != "" {

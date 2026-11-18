@@ -4,6 +4,8 @@
 
 每次连接（含重连）都启动新的 worker 进程；RDP 断开后 worker 上报 `disconnected` 并退出。
 
+macOS 机器（`protocol: vnc`）的 worker 是 `remoter-mcp vnc-worker --ipc <socket>`（Go，`internal/vnc`，design.md §5a），实现同一协议，差异见文末“VNC worker”。
+
 ## 帧格式
 
 每帧：`4 字节大端长度 L` + `1 字节类型 T` + `L-1 字节负载`。
@@ -56,3 +58,18 @@ JSON 中的整数一律以整数形式编码（不能是 `1.0`），Go 侧按 `i
 ## 线程模型
 
 worker 主线程用 `WaitForMultipleObjects` 同时等待 RDP 事件句柄、IPC socket 和一个唤醒事件，所有 IPC 写和 FreeRDP 调用都在主线程。GFX 解码和剪贴板回调可能在其他线程执行，它们只更新加锁的状态并触发唤醒事件。IPC 连接断开时 worker 立即断开 RDP 并退出。
+
+## VNC worker（`remoter-mcp vnc-worker`）
+
+| 项 | 行为 |
+|---|---|
+| `hello` | `freerdp` 为空，另有 `backend: "vnc"` |
+| `connect` | 使用 `host, port, username, password, connect_timeout_ms`，其余参数忽略；返回前已收到第一张整屏 |
+| `status` | 另返回 `logon_count: 1`、`logon_ms_ago`（距第一张整屏的毫秒数），让服务端不必等待登录通知 |
+| `mouse` | 按 RDP 指针标志解释（移动、左/中/右键按下抬起、垂直/水平滚轮），翻译为 RFB 按钮掩码 |
+| `mouse_ex` | 仅 X1（8 号按钮）；X2 返回错误 |
+| `key` | 扫描码 → X11 keysym（美式布局）；`win`（0x5B 扩展）→ `Super_L`（Mac 的 Command） |
+| `unicode` | 非 ASCII → Unicode keysym；ASCII → 普通 keysym；`\n` Return、`\t` Tab |
+| `cursor_get` | 位置为最后一次发出的指针位置，`has_shape` 恒为 false |
+| `cursor` 事件 | 每次指针移动后发送 |
+| `clipboard_get` / `clipboard_set` / `resize` / `cert_reply` | 返回错误（服务端经 SSH 处理剪贴板，见 design.md §5a） |

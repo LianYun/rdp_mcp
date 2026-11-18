@@ -113,6 +113,17 @@ describe("machine form", () => {
     expect(d).toMatchObject({ name: "a", host: "h", port: 3390, enable_drive: false, enabled: false, security: "tls", tags: ["x"] });
     expect(d.password).toBeUndefined();
   });
+  it("maps macOS machines and drops RDP-only fields", () => {
+    const f = formFromConfig({ name: "m", host: "h", username: "u", protocol: "vnc", ssh_port: 2222, enable_ssh: false });
+    expect(f.protocol).toBe("vnc");
+    const d = toMachineDef({ ...f, width: "10", domain: "CORP", security: "tls", enable_drive: "true" }, { editing: "m" });
+    expect(d).toEqual({ name: "m", host: "h", username: "u", enabled: true, protocol: "vnc", ssh_port: 2222, enable_ssh: false });
+    // width is not validated for macOS; the SSH port is
+    expect(validateForm({ ...f, width: "10" })).toEqual({});
+    expect(validateForm({ ...f, ssh_port: "0" }).ssh_port).toBe("form.err.port");
+    // Windows machines never send SSH fields or a protocol
+    expect(toMachineDef({ ...emptyForm(), name: "w", host: "h", username: "u", ssh_port: "22" })).not.toHaveProperty("ssh_port");
+  });
   it("splits tags on commas and whitespace", () => {
     expect(parseTags("a, b，c  d")).toEqual(["a", "b", "c", "d"]);
   });

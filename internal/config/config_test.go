@@ -111,3 +111,45 @@ func TestDotEnv(t *testing.T) {
 	os.Unsetenv("RDPMCP_T1")
 	os.Unsetenv("RDPMCP_T2")
 }
+
+func TestResolveMac(t *testing.T) {
+	c, err := Parse([]byte(`
+defaults:
+  port: 3390
+machines:
+  - name: win
+    host: a
+    username: u
+  - name: mac
+    protocol: vnc
+    host: b
+    username: u
+  - name: mac2
+    protocol: VNC
+    host: c
+    username: u
+    port: 5901
+    ssh_port: 2222
+    enable_ssh: false
+`), "x.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	win, mac, mac2 := c.Resolve(c.Machines[0]), c.Resolve(c.Machines[1]), c.Resolve(c.Machines[2])
+	if win.Port != 3390 || win.IsMac() || win.Platform() != "windows" {
+		t.Fatalf("win %+v", win)
+	}
+	if mac.Port != 5900 || mac.SSHPort != 22 || !mac.SSHEnabled || !mac.IsMac() || mac.Platform() != "macos" {
+		t.Fatalf("mac %+v", mac)
+	}
+	if mac2.Port != 5901 || mac2.SSHPort != 2222 || mac2.SSHEnabled || !mac2.IsMac() {
+		t.Fatalf("mac2 %+v", mac2)
+	}
+	if _, err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	c.Machines[0].Protocol = "ssh"
+	if _, err := c.Validate(); err == nil || !strings.Contains(err.Error(), "protocol") {
+		t.Fatalf("bad protocol accepted: %v", err)
+	}
+}

@@ -63,12 +63,16 @@ func (e *ControlError) Error() string {
 }
 
 type Options struct {
-	WorkerPath  string
-	DataDir     string
-	Logger      *slog.Logger
-	Bus         *events.Bus
-	KeychainGet func(key string) (string, error)
-	WorkerDebug bool
+	WorkerPath string
+	WorkerErr  error // why WorkerPath is empty (remoter-worker not found)
+	// VNCWorkerPath/Args start the macOS worker (normally this executable with "vnc-worker").
+	VNCWorkerPath string
+	VNCWorkerArgs []string
+	DataDir       string
+	Logger        *slog.Logger
+	Bus           *events.Bus
+	KeychainGet   func(key string) (string, error)
+	WorkerDebug   bool
 }
 
 type Manager struct {
@@ -123,8 +127,13 @@ func (m *Manager) UpdateConfig(cfg *config.Config) {
 		r := cfg.Resolve(mc)
 		if s, ok := m.sessions[mc.Name]; ok {
 			s.mu.Lock()
+			old := s.cfg
 			s.cfg = r
 			s.mu.Unlock()
+			if old.Host != r.Host || old.Username != r.Username || old.SSHPort != r.SSHPort || old.Protocol != r.Protocol ||
+				old.Password != r.Password || old.PasswordCmd != r.PasswordCmd || old.SSHEnabled != r.SSHEnabled || old.Cert != r.Cert {
+				go s.closeSSH()
+			}
 			continue
 		}
 		m.sessions[mc.Name] = &Session{m: m, name: mc.Name, cfg: r, state: StateIdle, mode: ModeAgent}

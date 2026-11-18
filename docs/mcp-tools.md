@@ -12,10 +12,25 @@
 - 截图默认合成鼠标指针（`server.draw_cursor`）。
 - 错误以 MCP 工具错误返回（`isError: true`），文本说明原因与建议（如"会话已锁定，请先截图确认"）。
 
+## macOS 机器（`protocol: vnc`，design.md D21 / §5a）
+
+`list_machines` 的 `platform` 为 `macos`。工具与参数相同，行为差异：
+
+| 工具 | macOS 上的行为 |
+|---|---|
+| screenshot / wait / mouse | 同 Windows。光标由服务端按最后一次发出的位置合成；`button: x2` 不支持 |
+| keyboard | `cmd` / `command` / `win` = Command，`alt` / `option` = Option；例如复制是 `hotkey ["cmd","c"]`。`type` 经 SSH 剪贴板粘贴（Cmd+V），不受输入法影响，`\n` / `\t` 发送 Return / Tab；屏幕锁定或 SSH 不可用时改为按键输入 |
+| clipboard | 经 SSH `pbcopy` / `pbpaste`，仅文本；不需要连接屏幕 |
+| run_command | 经 SSH 执行，`shell`：`zsh`（默认）\| `bash` \| `sh`，以登录 shell 运行（PATH 与终端一致）；**不需要解锁的桌面**；`detach` / `job` 同 Windows，`cancel` 结束整个进程组 |
+| file | 经 SSH；`remote_path` 为 POSIX 路径，可用 `~`；`search` 的 `pattern` 同 `find -name`。未给远程登录开“完全磁盘访问”时，`~/Desktop`、`~/Documents` 等受保护目录会报 `Operation not permitted` |
+| session | `set_resolution`、`send_ctrl_alt_del` 不支持 |
+
+需要 SSH 的功能（`run_command`、`job`、`file`、`clipboard`）在 `enable_ssh: false` 时返回错误。
+
 ## 工具列表
 
 ### list_machines
-无参数。返回每台机器：`name`、`description`、`tags`、`state`（idle/connecting/connected/reconnecting/failed）、`control_mode`（agent/human/paused）、`resolution`。
+无参数。返回每台机器：`name`、`description`、`tags`、`platform`（`windows` / `macos`）、`state`（idle/connecting/connected/reconnecting/failed）、`control_mode`（agent/human/paused）、`resolution`。
 
 ### screenshot
 | 参数 | 类型 | 必填 | 说明 |
@@ -72,7 +87,7 @@ OCR 说明（design.md D16）：
 |---|---|---|
 | machine | string | |
 | command | string | 命令或脚本内容 |
-| shell | `powershell`\|`cmd` | 默认 powershell |
+| shell | `powershell`\|`cmd`；macOS：`zsh`\|`bash`\|`sh` | Windows 默认 powershell，macOS 默认 zsh |
 | timeout | int（秒） | 默认 60；`detach` 时默认 3600 |
 | detach | bool | 后台执行，启动成功后立即返回任务 id，用 `job` 工具跟进 |
 
@@ -100,7 +115,7 @@ JobInfo：`{id, machine, command, shell, state(running/done/timeout/cancelled/lo
 | machine | string | |
 | action | `upload`\|`download`\|`list`\|`search` | |
 | local_path | string | MCP 服务所在机器的路径；download 时为空则直接返回文本内容（≤1MB） |
-| remote_path | string | Windows 路径（upload 目标可以是目录；list/search 为目录） |
+| remote_path | string | 远端路径：Windows 路径，或 macOS 的 POSIX 路径（可用 `~`）（upload 目标可以是目录；list/search 为目录） |
 | content | string | upload 时代替 local_path 直接上传文本 |
 | append | bool | upload 时追加到 remote_path 末尾（不存在则创建），而不是覆盖 |
 | pattern | string | search：文件名通配（`*`、`?`），在 remote_path 下递归查找，默认 `*` |

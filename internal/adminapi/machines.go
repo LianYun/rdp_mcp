@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -48,6 +49,9 @@ type machineRequest struct {
 	EnableDrive       *bool    `json:"enable_drive"`
 	EnableClipboard   *bool    `json:"enable_clipboard"`
 	DisableWallpaper  *bool    `json:"disable_wallpaper"`
+	Protocol          string   `json:"protocol"`
+	SSHPort           int      `json:"ssh_port"`
+	EnableSSH         *bool    `json:"enable_ssh"`
 }
 
 func (rq *machineRequest) toMachine() (config.Machine, error) {
@@ -55,6 +59,7 @@ func (rq *machineRequest) toMachine() (config.Machine, error) {
 		Name: rq.Name, Description: rq.Description, Tags: rq.Tags, Enabled: rq.Enabled,
 		Host: rq.Host, Username: rq.Username, Domain: rq.Domain,
 		CertFingerprint: rq.CertFingerprint,
+		Protocol:        rq.Protocol, SSHPort: rq.SSHPort, EnableSSH: rq.EnableSSH,
 		MachineOptions: config.MachineOptions{
 			Port: rq.Port, Width: rq.Width, Height: rq.Height,
 			Security: rq.Security, Cert: rq.Cert,
@@ -303,6 +308,7 @@ func (a *API) testMachine(w http.ResponseWriter, r *http.Request) {
 		Security *string `json:"security"`
 		Width    *int    `json:"width"`
 		Height   *int    `json:"height"`
+		Protocol *string `json:"protocol"`
 	}
 	if raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20)); len(raw) > 0 {
 		if err := json.Unmarshal(raw, &body); err != nil {
@@ -333,8 +339,47 @@ func (a *API) testMachine(w http.ResponseWriter, r *http.Request) {
 	if body.Height != nil {
 		mc.Height = *body.Height
 	}
+	if body.Protocol != nil {
+		mc.Protocol = *body.Protocol
+	}
 	res := a.Mgr.TestConnect(r.Context(), mc)
 	writeJSON(w, 200, res)
+}
+
+var testNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// testDefinition tries a machine definition that may not be saved yet (the UI form): the body is
+// the same as POST /machines. A literal password is used for this attempt only; without one, the
+// saved password of the machine with the same name (if any) is used. Nothing is written.
+func (a *API) testDefinition(w http.ResponseWriter, r *http.Request) {
+	var rq machineRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&rq); err != nil {
+		writeErr(w, 400, "bad_request", err.Error())
+		return
+	}
+	mc, err := rq.toMachine()
+	if err != nil {
+		writeErr(w, 400, "bad_request", err.Error())
+		return
+	}
+	if strings.TrimSpace(mc.Host) == "" || strings.TrimSpace(mc.Username) == "" {
+		writeErr(w, 400, "bad_request", "host and username are required")
+		return
+	}
+	switch {
+	case rq.Password != nil && *rq.Password != "":
+		mc.Password = *rq.Password
+	case rq.PasswordCmd != nil && *rq.PasswordCmd != "":
+		mc.PasswordCmd = *rq.PasswordCmd
+	default:
+		if old, ok := a.Mgr.Config().Machine(rq.Name); ok {
+			mc.Password, mc.PasswordCmd = old.Password, old.PasswordCmd
+		}
+	}
+	if !testNameRe.MatchString(mc.Name) {
+		mc.Name = "new" // only used for logs and the temporary session name
+	}
+	writeJSON(w, 200, a.Mgr.TestConnect(r.Context(), mc))
 }
 
 func (a *API) answerCert(w http.ResponseWriter, r *http.Request) {

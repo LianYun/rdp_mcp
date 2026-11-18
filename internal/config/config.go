@@ -118,8 +118,17 @@ type Machine struct {
 	PasswordCmd     string   `yaml:"password_cmd,omitempty" json:"-"`
 	Domain          string   `yaml:"domain,omitempty" json:"domain,omitempty"`
 	CertFingerprint string   `yaml:"cert_fingerprint,omitempty" json:"cert_fingerprint,omitempty"`
-	MachineOptions  `yaml:",inline"`
+	// Protocol is rdp (Windows, default) or vnc (macOS Screen Sharing + SSH, docs/design.md D21).
+	Protocol       string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+	SSHPort        int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
+	EnableSSH      *bool  `yaml:"enable_ssh,omitempty" json:"enable_ssh,omitempty"`
+	MachineOptions `yaml:",inline"`
 }
+
+const (
+	ProtocolRDP = "rdp"
+	ProtocolVNC = "vnc"
+)
 
 type Config struct {
 	Server   Server         `yaml:"server" json:"server"`
@@ -145,6 +154,20 @@ type Resolved struct {
 	EnableClipboard   bool
 	DisableWallpaper  bool
 	IsEnabled         bool
+	Protocol          string // rdp | vnc
+	SSHPort           int    // vnc only
+	SSHEnabled        bool   // vnc only
+}
+
+// IsMac reports whether the machine is a macOS target (protocol: vnc).
+func (r Resolved) IsMac() bool { return r.Protocol == ProtocolVNC }
+
+// Platform is the target OS shown to the model: windows | macos.
+func (r Resolved) Platform() string {
+	if r.IsMac() {
+		return "macos"
+	}
+	return "windows"
 }
 
 func boolOr(vals ...*bool) bool {
@@ -172,7 +195,15 @@ func firstNonZero[T comparable](vals ...T) T {
 func (c *Config) Resolve(m Machine) Resolved {
 	d := c.Defaults
 	r := Resolved{Machine: m}
-	r.Port = firstNonZero(m.Port, d.Port, 3389)
+	r.Protocol = strings.ToLower(firstNonZero(m.Protocol, ProtocolRDP))
+	if r.Protocol == ProtocolVNC {
+		// defaults.port is an RDP port; Mac machines do not inherit it.
+		r.Port = firstNonZero(m.Port, 5900)
+		r.SSHPort = firstNonZero(m.SSHPort, 22)
+		r.SSHEnabled = boolOr(m.EnableSSH, ptr(true))
+	} else {
+		r.Port = firstNonZero(m.Port, d.Port, 3389)
+	}
 	r.Width = firstNonZero(m.Width, d.Width, 1920)
 	r.Height = firstNonZero(m.Height, d.Height, 1080)
 	r.Security = firstNonZero(m.Security, d.Security, "auto")
@@ -283,6 +314,17 @@ func (c *Config) Validate() (warnings []string, err error) {
 			warnings = append(warnings, fmt.Sprintf("%s: plaintext password in config; prefer keychain:, ${ENV} or password_cmd", where))
 		}
 		r := c.Resolve(m)
+		switch r.Protocol {
+		case ProtocolRDP, ProtocolVNC:
+		default:
+			errs = append(errs, fmt.Errorf("%s: protocol must be rdp or vnc", where))
+		}
+		if r.Protocol != ProtocolVNC && (m.SSHPort != 0 || m.EnableSSH != nil) {
+			warnings = append(warnings, fmt.Sprintf("%s: ssh_port/enable_ssh only apply to protocol: vnc", where))
+		}
+		if r.SSHPort < 0 || r.SSHPort > 65535 || r.Port < 1 || r.Port > 65535 {
+			errs = append(errs, fmt.Errorf("%s: port out of range", where))
+		}
 		switch r.Security {
 		case "auto", "nla", "tls", "rdp":
 		default:

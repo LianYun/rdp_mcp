@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/LianYun/rdp_mcp/internal/config"
 	"github.com/LianYun/rdp_mcp/internal/imaging"
 	"github.com/LianYun/rdp_mcp/internal/worker"
@@ -41,6 +43,10 @@ type Session struct {
 	pendingCert  *certPrompt
 	idleHolds    int  // >0 suspends idle disconnect (e.g. running detached jobs)
 	quiet        bool // test session: no bus events, no cert prompt, no reconnect
+
+	sshMu   sync.Mutex // macOS: SSH client (ssh.go)
+	sshc    *ssh.Client
+	sshUsed time.Time
 }
 
 type cursorState struct {
@@ -60,6 +66,8 @@ type Info struct {
 	Host         string      `json:"host"`
 	Port         int         `json:"port"`
 	Username     string      `json:"username"`
+	Protocol     string      `json:"protocol"` // rdp | vnc
+	Platform     string      `json:"platform"` // windows | macos
 	Enabled      bool        `json:"enabled"`
 	State        State       `json:"state"`
 	ControlMode  ControlMode `json:"control_mode"`
@@ -86,6 +94,7 @@ func (s *Session) Info() Info {
 	in := Info{
 		Name: s.name, Description: s.cfg.Description, Tags: s.cfg.Tags,
 		Host: s.cfg.Host, Port: s.cfg.Port, Username: s.cfg.Username, Enabled: s.cfg.IsEnabled,
+		Protocol: s.cfg.Protocol, Platform: s.cfg.Platform(),
 		State: s.state, ControlMode: s.mode, LastError: s.lastErr, Viewers: len(s.viewers),
 	}
 	if s.state == StateConnected {
@@ -137,6 +146,10 @@ func (s *Session) setState(st State, errMsg string) {
 		s.m.opts.Bus.Publish("machine_state", info)
 	}
 }
+
+// CheckAgent returns an error if the control mode does not allow agent (MCP) actions.
+// Use it for operations that do not go through Do (macOS SSH commands, files, clipboard).
+func (s *Session) CheckAgent() error { return s.checkSource(SourceAgent) }
 
 func (s *Session) checkSource(src Source) error {
 	if src != SourceAgent && src != SourceHuman {
@@ -207,20 +220,32 @@ func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) erro
 	dataDir := s.m.opts.DataDir
 	logDir := filepath.Join(dataDir, "logs")
 	_ = os.MkdirAll(logDir, 0o700)
-	// FreeRDP's own certificate store is never used (the service pins certificates in known_hosts),
-	// so its "host key changed" warnings are noise outside debug mode.
-	env := []string{"WLOG_LEVEL=WARN", "WLOG_FILTER=com.freerdp.crypto:FATAL"}
-	if s.m.opts.WorkerDebug {
-		env = []string{"WLOG_LEVEL=DEBUG"}
-	}
-	w, err := worker.Start(ctx, worker.StartOptions{
+	so := worker.StartOptions{
 		WorkerPath: s.m.opts.WorkerPath,
 		SocketDir:  filepath.Join(dataDir, "run", "ipc"),
 		Name:       s.name,
 		LogFile:    filepath.Join(logDir, "worker-"+s.name+".log"),
-		Env:        env,
 		Logger:     log,
-	})
+	}
+	if r.IsMac() {
+		so.WorkerPath, so.Args = s.m.opts.VNCWorkerPath, s.m.opts.VNCWorkerArgs
+	} else {
+		// FreeRDP's own certificate store is never used (the service pins certificates in known_hosts),
+		// so its "host key changed" warnings are noise outside debug mode.
+		so.Env = []string{"WLOG_LEVEL=WARN", "WLOG_FILTER=com.freerdp.crypto:FATAL"}
+		if s.m.opts.WorkerDebug {
+			so.Env = []string{"WLOG_LEVEL=DEBUG"}
+		}
+	}
+	if so.WorkerPath == "" {
+		err := s.m.opts.WorkerErr
+		if err == nil || r.IsMac() {
+			err = errors.New("no worker executable configured")
+		}
+		s.setState(StateFailed, err.Error())
+		return err
+	}
+	w, err := worker.Start(ctx, so)
 	if err != nil {
 		s.setState(StateFailed, err.Error())
 		return err
@@ -234,20 +259,28 @@ func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) erro
 	go s.eventLoop(w, gen)
 
 	params := map[string]any{
-		"host":              r.Host,
-		"port":              r.Port,
-		"username":          r.Username,
-		"password":          pass,
-		"domain":            r.Domain,
-		"width":             r.Width,
-		"height":            r.Height,
-		"security":          r.Security,
-		"cert":              r.Cert,
-		"clipboard":         r.EnableClipboard,
-		"disable_wallpaper": r.DisableWallpaper,
-		"config_dir":        filepath.Join(dataDir, "freerdp"),
+		"host":               r.Host,
+		"port":               r.Port,
+		"username":           r.Username,
+		"password":           pass,
+		"connect_timeout_ms": 45000,
 	}
-	if r.EnableDrive {
+	if !r.IsMac() {
+		for k, v := range map[string]any{
+			"domain":            r.Domain,
+			"width":             r.Width,
+			"height":            r.Height,
+			"security":          r.Security,
+			"cert":              r.Cert,
+			"clipboard":         r.EnableClipboard,
+			"disable_wallpaper": r.DisableWallpaper,
+			"config_dir":        filepath.Join(dataDir, "freerdp"),
+		} {
+			params[k] = v
+		}
+		delete(params, "connect_timeout_ms")
+	}
+	if r.EnableDrive && !r.IsMac() {
 		dir := s.shareDir()
 		if err := os.MkdirAll(filepath.Join(dir, "jobs"), 0o700); err == nil {
 			params["drive_path"] = dir
@@ -307,7 +340,11 @@ func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) erro
 		return ctx.Err()
 	}
 	s.setState(StateConnected, "")
-	log.Info("connected", "width", size.Width, "height", size.Height, "freerdp", w.Hello.FreeRDP)
+	if w.Hello.Backend == "vnc" {
+		log.Info("connected", "width", size.Width, "height", size.Height, "backend", "vnc")
+	} else {
+		log.Info("connected", "width", size.Width, "height", size.Height, "freerdp", w.Hello.FreeRDP)
+	}
 	return nil
 }
 
@@ -536,11 +573,12 @@ func (s *Session) Connect(ctx context.Context) error {
 	return err
 }
 
-// Disconnect closes the session.
+// Disconnect closes the session (and, for a Mac, its SSH connection).
 func (s *Session) Disconnect() {
 	s.op.Lock()
 	defer s.op.Unlock()
 	s.disconnectLocked()
+	s.closeSSH()
 }
 
 func (s *Session) disconnectLocked() {
@@ -570,6 +608,7 @@ func (s *Session) reapIfIdle() {
 	idle := s.state == StateConnected && r.IdleDisconnect > 0 && len(s.viewers) == 0 && s.idleHolds == 0 &&
 		time.Since(s.lastActivity) > r.IdleDisconnect
 	s.mu.Unlock()
+	s.reapSSHIfIdle(r.IdleDisconnect)
 	if idle && s.op.TryLock() {
 		s.m.opts.Logger.Info("disconnecting idle session", "machine", s.name)
 		s.disconnectLocked()

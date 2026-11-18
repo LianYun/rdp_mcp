@@ -46,7 +46,8 @@ func newTestAPI(t *testing.T) (*API, http.Handler, string, fakeKeychain) {
 		t.Fatal(err)
 	}
 	bus := events.NewBus()
-	mgr := session.NewManager(cfg, session.Options{DataDir: dir, Bus: bus, WorkerPath: "/nonexistent"})
+	exe, _ := os.Executable()
+	mgr := session.NewManager(cfg, session.Options{DataDir: dir, Bus: bus, WorkerPath: "/nonexistent", VNCWorkerPath: exe})
 	t.Cleanup(mgr.Shutdown)
 	kc := fakeKeychain{}
 	a := &API{Mgr: mgr, Bus: bus, Audit: audit.New(filepath.Join(dir, "audit"), true, false, 7, bus),

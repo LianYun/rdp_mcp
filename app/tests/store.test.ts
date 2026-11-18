@@ -7,6 +7,8 @@ const m = (name: string, p: Partial<MachineInfo> = {}): MachineInfo => ({
   host: "h",
   port: 3389,
   username: "u",
+  protocol: "rdp",
+  platform: "windows",
   enabled: true,
   state: "idle",
   control_mode: "agent",

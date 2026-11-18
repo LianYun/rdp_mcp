@@ -13,6 +13,10 @@ export interface PendingCert {
   reason: string;
 }
 
+/** rdp = Windows；vnc = macOS（屏幕共享 + SSH，design.md D21）。 */
+export type Protocol = "rdp" | "vnc";
+export type Platform = "windows" | "macos";
+
 export interface MachineInfo {
   name: string;
   description?: string;
@@ -20,6 +24,8 @@ export interface MachineInfo {
   host: string;
   port: number;
   username: string;
+  protocol: Protocol;
+  platform: Platform;
   enabled: boolean;
   state: MachineState;
   control_mode: ControlMode;
@@ -77,6 +83,9 @@ export interface MachineDef {
   enable_drive?: boolean;
   enable_clipboard?: boolean;
   disable_wallpaper?: boolean;
+  protocol?: Protocol;
+  ssh_port?: number;
+  enable_ssh?: boolean;
 }
 
 /** GET /config 的 machines[]（密码字段为 *** 或引用）。 */
@@ -102,6 +111,9 @@ export interface MachineConfig {
   enable_drive?: boolean;
   enable_clipboard?: boolean;
   disable_wallpaper?: boolean;
+  protocol?: Protocol;
+  ssh_port?: number;
+  enable_ssh?: boolean;
 }
 
 export interface ServerConfig {
@@ -118,7 +130,7 @@ export interface ServerConfig {
   ocr: { enabled?: boolean; tesseract?: string; languages?: string };
 }
 
-export type DefaultsConfig = Omit<MachineConfig, "name" | "host" | "username" | "description" | "tags" | "enabled" | "domain" | "password" | "password_cmd" | "cert_fingerprint">;
+export type DefaultsConfig = Omit<MachineConfig, "name" | "host" | "username" | "description" | "tags" | "enabled" | "domain" | "password" | "password_cmd" | "cert_fingerprint" | "protocol" | "ssh_port" | "enable_ssh">;
 
 export interface ConfigView {
   path: string;
@@ -140,6 +152,7 @@ export interface TestRequest {
   security?: Security;
   width?: number;
   height?: number;
+  protocol?: Protocol;
 }
 
 export interface TestResult {
@@ -148,6 +161,8 @@ export interface TestResult {
   width?: number;
   height?: number;
   freerdp?: string;
+  /** macOS：SSH 试连结果，"ok" 或错误信息。 */
+  ssh?: string;
   screenshot?: string;
 }
 

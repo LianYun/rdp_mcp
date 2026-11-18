@@ -33,12 +33,13 @@ var (
 	launchPref = map[string]int{}
 )
 
-// job describes one prepared command on the share.
+// job describes one prepared command: on the share (Windows) or in the Mac's job directory.
 type job struct {
 	ID      string
 	Machine string
-	dir     string // local jobs dir
-	remote  string // \\tsclient\mcp\jobs\<id>
+	dir     string // local jobs dir (Windows)
+	remote  string // \\tsclient\mcp\jobs\<id> (Windows)
+	mac     *macJob
 	Timeout time.Duration
 }
 
@@ -47,9 +48,29 @@ func (j *job) local(ext string) string { return filepath.Join(j.dir, j.ID+ext) }
 var jobExts = []string{".ps1", ".user.ps1", ".user.cmd", ".out", ".err", ".code", ".pid", ".started"}
 
 func (j *job) cleanup() {
+	if j.mac != nil {
+		j.mac.cleanup()
+		return
+	}
 	for _, ext := range jobExts {
 		_ = os.Remove(j.local(ext))
 	}
+}
+
+// read returns a job file's content.
+func (j *job) read(ext string) ([]byte, error) {
+	if j.mac != nil {
+		return j.mac.read(ext)
+	}
+	return os.ReadFile(j.local(ext))
+}
+
+// tail returns the last max bytes of a job output file as text.
+func (j *job) tail(ext string, max int) string {
+	if j.mac != nil {
+		return j.mac.tail(ext, max)
+	}
+	return readTail(j.local(ext), max)
 }
 
 // prepare writes the user script and the runner for command.

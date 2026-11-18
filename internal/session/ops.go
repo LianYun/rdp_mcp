@@ -448,6 +448,63 @@ func (o *Ops) Press(names []string, repeat int) error {
 
 // Type types arbitrary Unicode text (newline = Enter, tab = Tab).
 func (o *Ops) Type(text string) error {
+	if o.s.SSHAvailable() {
+		if ok, clip, err := o.s.macPasteState(o.ctx); err == nil && ok {
+			return o.pasteType(text, clip)
+		} else if err != nil {
+			o.s.m.opts.Logger.Warn("paste typing unavailable, sending key events", "machine", o.s.name, "err", err)
+		}
+	}
+	return o.typeKeys(text)
+}
+
+// pasteType types text on a Mac by pasting it (Cmd+V) segment by segment, so the active input
+// method cannot rewrite it; newlines and tabs are sent as Return/Tab keys. The previous clipboard
+// text is restored afterwards.
+func (o *Ops) pasteType(text, oldClip string) error {
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = o.s.MacClipboardSet(ctx, oldClip)
+	}()
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	seg := strings.Builder{}
+	flush := func() error {
+		if seg.Len() == 0 {
+			return nil
+		}
+		if err := o.s.MacClipboardSet(o.ctx, seg.String()); err != nil {
+			return err
+		}
+		seg.Reset()
+		if err := o.Hotkey([]string{"cmd", "v"}); err != nil {
+			return err
+		}
+		// Let the app read the pasteboard before it changes again.
+		return o.Sleep(250 * time.Millisecond)
+	}
+	for _, r := range text {
+		switch r {
+		case '\n', '\t':
+			if err := flush(); err != nil {
+				return err
+			}
+			key := "enter"
+			if r == '\t' {
+				key = "tab"
+			}
+			if err := o.Press([]string{key}, 1); err != nil {
+				return err
+			}
+		case '\r':
+		default:
+			seg.WriteRune(r)
+		}
+	}
+	return flush()
+}
+
+func (o *Ops) typeKeys(text string) error {
 	const chunk = 24
 	for len(text) > 0 {
 		n, i := 0, 0
@@ -472,6 +529,9 @@ func (o *Ops) Type(text string) error {
 // ---- clipboard / display ----
 
 func (o *Ops) ClipboardGet() (string, error) {
+	if o.s.Resolved().IsMac() {
+		return o.s.MacClipboardGet(o.ctx)
+	}
 	ctx, cancel := context.WithTimeout(o.ctx, 10*time.Second)
 	defer cancel()
 	r, err := o.w.Call(ctx, "clipboard_get", map[string]any{"timeout_ms": 5000})
@@ -484,12 +544,18 @@ func (o *Ops) ClipboardGet() (string, error) {
 }
 
 func (o *Ops) ClipboardSet(text string) error {
+	if o.s.Resolved().IsMac() {
+		return o.s.MacClipboardSet(o.ctx, text)
+	}
 	_, err := o.call("clipboard_set", map[string]any{"text": text})
 	return err
 }
 
 // Resize asks the server to change the desktop size and waits for it.
 func (o *Ops) Resize(w, h int) (int, int, error) {
+	if o.s.Resolved().IsMac() {
+		return 0, 0, ErrMacUnsupported("changing the resolution")
+	}
 	if _, err := o.call("resize", map[string]any{"width": w, "height": h}); err != nil {
 		return 0, 0, err
 	}
@@ -512,7 +578,17 @@ func (o *Ops) Resize(w, h int) (int, int, error) {
 }
 
 // CtrlAltDel sends the secure attention sequence.
-func (o *Ops) CtrlAltDel() error { return o.Hotkey([]string{"ctrl", "alt", "delete"}) }
+func (o *Ops) CtrlAltDel() error {
+	if o.s.Resolved().IsMac() {
+		return ErrMacUnsupported("ctrl+alt+del")
+	}
+	return o.Hotkey([]string{"ctrl", "alt", "delete"})
+}
+
+// ErrMacUnsupported reports an operation that macOS (VNC) machines do not support.
+func ErrMacUnsupported(what string) error {
+	return fmt.Errorf("%s is not supported for macOS machines", what)
+}
 
 // ---- live view (UI takeover) ----
 

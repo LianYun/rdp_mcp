@@ -13,10 +13,12 @@ import (
 	"github.com/LianYun/rdp_mcp/internal/config"
 	"github.com/LianYun/rdp_mcp/internal/events"
 	"github.com/LianYun/rdp_mcp/internal/testutil/fakeworker"
+	"github.com/LianYun/rdp_mcp/internal/testutil/vncworker"
 )
 
 func TestMain(m *testing.M) {
 	fakeworker.MaybeRun()
+	vncworker.MaybeRun()
 	os.Exit(m.Run())
 }
 

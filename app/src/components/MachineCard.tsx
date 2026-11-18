@@ -57,6 +57,7 @@ export function MachineCard({ m }: { m: MachineInfo }) {
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span className="truncate mono">
               {m.host}:{m.port}
+              {m.platform === "macos" && <span className="ml-1.5 font-sans" data-testid="platform-macos">· {t("machines.platform.macos")}</span>}
             </span>
             <ControlBadge mode={m.control_mode} />
           </div>

@@ -31,11 +31,12 @@ import (
 	"github.com/LianYun/rdp_mcp/internal/runtime"
 	"github.com/LianYun/rdp_mcp/internal/secrets"
 	"github.com/LianYun/rdp_mcp/internal/session"
+	"github.com/LianYun/rdp_mcp/internal/vnc"
 )
 
 var version = "0.1.0-dev"
 
-const usage = `remoter-mcp - control Windows machines over RDP via MCP
+const usage = `remoter-mcp - control Windows (RDP) and macOS (VNC + SSH) machines via MCP
 
 Usage:
   remoter-mcp serve [--config PATH] [--listen ADDR] [--worker PATH] [--log-level LEVEL]
@@ -70,6 +71,8 @@ func main() {
 		err = cmdSecret(args)
 	case "trust":
 		err = cmdTrust(args)
+	case "vnc-worker": // internal: started by the service for protocol: vnc machines
+		err = cmdVNCWorker(args)
 	case "version", "--version", "-v":
 		fmt.Println("remoter-mcp", version)
 	case "help", "--help", "-h":
@@ -187,9 +190,14 @@ func cmdServe(args []string) error {
 	}
 	defer rt.Release()
 
-	wp, err := session.FindWorker(cfg.Server.WorkerPath)
+	// remoter-worker is only needed for RDP machines; a Mac-only setup runs without it.
+	wp, werr := session.FindWorker(cfg.Server.WorkerPath)
+	if werr != nil {
+		log.Warn("RDP machines cannot connect until remoter-worker is available", "err", werr)
+	}
+	self, err := os.Executable()
 	if err != nil {
-		return err
+		return fmt.Errorf("locate own executable (needed for the VNC worker): %w", err)
 	}
 
 	adminToken := cfg.Server.AdminToken
@@ -206,12 +214,15 @@ func cmdServe(args []string) error {
 	al := audit.New(filepath.Join(dataDir, "audit"), cfg.Server.AuditEnabled(), cfg.Server.Audit.RedactTypedText,
 		cfg.Server.AuditRetentionDays(), bus)
 	mgr := session.NewManager(cfg, session.Options{
-		WorkerPath:  wp,
-		DataDir:     dataDir,
-		Logger:      log,
-		Bus:         bus,
-		KeychainGet: secrets.Get,
-		WorkerDebug: strings.EqualFold(cfg.Server.LogLevel, "debug"),
+		WorkerPath:    wp,
+		WorkerErr:     werr,
+		VNCWorkerPath: self,
+		VNCWorkerArgs: []string{"vnc-worker"},
+		DataDir:       dataDir,
+		Logger:        log,
+		Bus:           bus,
+		KeychainGet:   secrets.Get,
+		WorkerDebug:   strings.EqualFold(cfg.Server.LogLevel, "debug"),
 	})
 
 	var mcpTokenMu sync.RWMutex
@@ -473,6 +484,15 @@ func cmdCheckConfig(args []string) error {
 		if _, err := config.ResolvePassword(context.Background(), m, secrets.Get); err != nil {
 			pw = "ERROR: " + err.Error()
 		}
+		if r.IsMac() {
+			ssh := fmt.Sprintf("ssh port %d", r.SSHPort)
+			if !r.SSHEnabled {
+				ssh = "ssh disabled"
+			}
+			fmt.Printf("  %-16s macOS  %s@%s:%d  %s cert=%s  password: %s\n",
+				m.Name, m.Username, m.Host, r.Port, ssh, r.Cert, pw)
+			continue
+		}
 		fmt.Printf("  %-16s %s@%s:%d  %dx%d  security=%s cert=%s  password: %s\n",
 			m.Name, m.Username, m.Host, r.Port, r.Width, r.Height, r.Security, r.Cert, pw)
 	}
@@ -483,6 +503,16 @@ func cmdCheckConfig(args []string) error {
 	}
 	fmt.Println("OK")
 	return nil
+}
+
+func cmdVNCWorker(args []string) error {
+	fs := flag.NewFlagSet("vnc-worker", flag.ExitOnError)
+	sock := fs.String("ipc", "", "IPC socket path")
+	_ = fs.Parse(args)
+	if *sock == "" {
+		return errors.New("vnc-worker is started by remoter-mcp serve (--ipc required)")
+	}
+	return vnc.RunWorker(*sock, version)
 }
 
 func cmdSecret(args []string) error {
@@ -530,9 +560,14 @@ func cmdTrust(args []string) error {
 	}
 	r := cfg.Resolve(m)
 	kh := session.NewKnownHosts(filepath.Join(cfg.Server.EffectiveDataDir(), "known_hosts"))
-	if err := kh.Delete(r.Host + ":" + strconv.Itoa(r.Port)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	key := r.Host + ":" + strconv.Itoa(r.Port)
+	what := "certificate"
+	if r.IsMac() {
+		key, what = session.SSHKnownHostsKey(r.Host, r.SSHPort), "SSH host key"
+	}
+	if err := kh.Delete(key); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	fmt.Printf("forgot certificate for %s:%d; the next connection will trust the presented certificate\n", r.Host, r.Port)
+	fmt.Printf("forgot the %s for %s; the next connection will trust the presented one\n", what, key)
 	return nil
 }

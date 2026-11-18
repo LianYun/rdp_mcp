@@ -35,12 +35,14 @@ func New(mgr *session.Manager, al *audit.Logger, version string) *Server {
 	return &Server{mgr: mgr, audit: al, version: version}
 }
 
-const instructions = `Control remote Windows desktops over RDP.
-Workflow: call list_machines, then screenshot a machine to see it. All x/y coordinates are in the
-coordinate space of the most recent screenshot of that machine (the server rescales them).
+const instructions = `Control remote Windows (RDP) and macOS (Screen Sharing + SSH) desktops.
+Workflow: call list_machines (each machine has a platform: windows or macos), then screenshot a machine to see it.
+All x/y coordinates are in the coordinate space of the most recent screenshot of that machine (the server rescales them).
 mouse and keyboard actions return a fresh screenshot by default, so you rarely need a separate screenshot call.
-Use keyboard action "type" for text (any language), "hotkey" for combinations like ["ctrl","c"] or ["win","r"].
-run_command executes PowerShell/cmd on the remote desktop and returns stdout/stderr; it needs an unlocked desktop.
+Use keyboard action "type" for text (any language), "hotkey" for combinations: on Windows e.g. ["ctrl","c"] or ["win","r"];
+on macOS use "cmd" for Command, e.g. ["cmd","c"], ["cmd","space"] for Spotlight.
+run_command: on Windows it runs PowerShell/cmd through the desktop (needs an unlocked desktop);
+on macOS it runs zsh/bash over SSH (no desktop needed). Both return exit_code, stdout and stderr.
 If a tool says the machine is under human control or paused, stop and wait for the operator.`
 
 // MCP returns a configured MCP server.
@@ -49,7 +51,7 @@ func (s *Server) MCP() *mcp.Server {
 		&mcp.ServerOptions{Instructions: instructions})
 
 	mcp.AddTool(srv, &mcp.Tool{Name: "list_machines",
-		Description: "List configured Windows machines with connection state, control mode and resolution."},
+		Description: "List configured machines with platform (windows | macos), connection state, control mode and resolution."},
 		wrap(s, "list_machines", s.listMachines))
 	mcp.AddTool(srv, &mcp.Tool{Name: "screenshot",
 		Description: "Capture the screen of a machine. Connects automatically if needed. Coordinates used by other tools refer to this image. Pass ocr: true to also get every text line with its box and clickable center (works on any app, even when the desktop is locked); region zooms in without changing the coordinate system."},
@@ -58,13 +60,13 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "Mouse action at screenshot coordinates: move, click, double_click, right_click, middle_click, down, up, drag (x,y -> to_x,to_y), scroll (direction + amount)."},
 		wrap(s, "mouse", s.mouse))
 	mcp.AddTool(srv, &mcp.Tool{Name: "keyboard",
-		Description: "Keyboard action: type (any Unicode text; \\n = Enter), press (tap keys in sequence, e.g. [\"enter\"]), hotkey (combination, e.g. [\"ctrl\",\"shift\",\"esc\"]), down/up (hold or release keys). Key names: ctrl shift alt win enter esc tab backspace delete home end pageup pagedown up down left right space f1-f24 a-z 0-9 and symbols."},
+		Description: "Keyboard action: type (any Unicode text; \\n = Enter), press (tap keys in sequence, e.g. [\"enter\"]), hotkey (combination, e.g. [\"ctrl\",\"shift\",\"esc\"]; on macOS [\"cmd\",\"c\"]), down/up (hold or release keys). Key names: ctrl shift alt win enter esc tab backspace delete home end pageup pagedown up down left right space f1-f24 a-z 0-9 and symbols; on macOS cmd (= Command) and option (= alt)."},
 		wrap(s, "keyboard", s.keyboard))
 	mcp.AddTool(srv, &mcp.Tool{Name: "clipboard",
 		Description: "Read (get) or write (set) the remote clipboard text."},
 		wrap(s, "clipboard", s.clipboard))
 	mcp.AddTool(srv, &mcp.Tool{Name: "run_command",
-		Description: "Run a PowerShell (default) or cmd command on the remote machine and return exit_code, stdout and stderr. Works by typing into the Run dialog, so the desktop must be unlocked and not blocked by a modal dialog (the tool checks that the Run dialog opened before typing). For long-running commands pass detach: true to get a job id immediately and follow it with the job tool."},
+		Description: "Run a command on the remote machine and return exit_code, stdout and stderr. Windows: PowerShell (default) or cmd, started by typing into the Run dialog, so the desktop must be unlocked and not blocked by a modal dialog (the tool checks that the Run dialog opened before typing). macOS: zsh (default), bash or sh as a login shell over SSH; works without the desktop. For long-running commands pass detach: true to get a job id immediately and follow it with the job tool."},
 		wrap(s, "run_command", s.runCommand))
 	mcp.AddTool(srv, &mcp.Tool{Name: "job",
 		Description: "Manage commands started with run_command detach:true: list, status, output (tail of stdout/stderr), cancel (kills the process tree), remove (forget a finished job)."},
@@ -73,7 +75,7 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "Transfer files: upload (local_path or content -> remote_path; append: true appends), download (remote_path -> local_path, or return text content if local_path is empty), list (remote directory), search (recursive name pattern under remote_path, e.g. pattern *.log). local_path refers to the machine running this MCP server."},
 		wrap(s, "file", s.file))
 	mcp.AddTool(srv, &mcp.Tool{Name: "session",
-		Description: "Manage the RDP session: connect, disconnect, reconnect, status, set_resolution (width,height), send_ctrl_alt_del."},
+		Description: "Manage the remote session: connect, disconnect, reconnect, status, set_resolution (width,height; Windows only), send_ctrl_alt_del (Windows only)."},
 		wrap(s, "session", s.sessionTool))
 	mcp.AddTool(srv, &mcp.Tool{Name: "wait",
 		Description: "Wait a number of seconds, or until the screen stops changing (until_stable). Returns a screenshot by default."},
@@ -190,6 +192,7 @@ type listIn struct{}
 
 type machineView struct {
 	Name        string   `json:"name"`
+	Platform    string   `json:"platform"`
 	Description string   `json:"description,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	State       string   `json:"state"`
@@ -205,7 +208,7 @@ func (s *Server) listMachines(ctx context.Context, _ listIn) (*mcp.CallToolResul
 		if !in.Enabled {
 			continue
 		}
-		v := machineView{Name: in.Name, Description: in.Description, Tags: in.Tags,
+		v := machineView{Name: in.Name, Platform: in.Platform, Description: in.Description, Tags: in.Tags,
 			State: string(in.State), ControlMode: string(in.ControlMode), LastError: in.LastError}
 		if in.Width > 0 {
 			v.Resolution = []int{in.Width, in.Height}
@@ -471,6 +474,25 @@ func (s *Server) clipboard(ctx context.Context, in clipboardIn) (*mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
+	if sess.Resolved().IsMac() { // over SSH; no screen connection needed
+		if err := sess.CheckAgent(); err != nil {
+			return nil, err
+		}
+		switch strings.ToLower(in.Action) {
+		case "get":
+			t, err := sess.MacClipboardGet(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return textResult(t), nil
+		case "set":
+			if err := sess.MacClipboardSet(ctx, in.Text); err != nil {
+				return nil, err
+			}
+			return textResult("ok: clipboard set; paste with keyboard hotkey [\"cmd\",\"v\"]"), nil
+		}
+		return nil, fmt.Errorf("action must be get or set")
+	}
 	var res *mcp.CallToolResult
 	err = sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
 		switch strings.ToLower(in.Action) {
@@ -498,7 +520,7 @@ func (s *Server) clipboard(ctx context.Context, in clipboardIn) (*mcp.CallToolRe
 type runIn struct {
 	Machine string `json:"machine" jsonschema:"machine name"`
 	Command string `json:"command" jsonschema:"command or script body"`
-	Shell   string `json:"shell,omitempty" jsonschema:"powershell (default) | cmd"`
+	Shell   string `json:"shell,omitempty" jsonschema:"Windows: powershell (default) | cmd; macOS: zsh (default) | bash | sh"`
 	Timeout int    `json:"timeout,omitempty" jsonschema:"timeout in seconds (default 60; with detach default 3600)"`
 	Detach  bool   `json:"detach,omitempty" jsonschema:"start in the background and return a job id immediately"`
 }
@@ -510,6 +532,9 @@ func (s *Server) runCommand(ctx context.Context, in runIn) (*mcp.CallToolResult,
 	}
 	if strings.TrimSpace(in.Command) == "" {
 		return nil, errors.New("command is required")
+	}
+	if sess.Resolved().IsMac() {
+		return s.runCommandMac(ctx, sess, in)
 	}
 	var res *mcp.CallToolResult
 	err = sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
@@ -537,6 +562,27 @@ func (s *Server) runCommand(ctx context.Context, in runIn) (*mcp.CallToolResult,
 		return nil
 	})
 	return res, err
+}
+
+func (s *Server) runCommandMac(ctx context.Context, sess *session.Session, in runIn) (*mcp.CallToolResult, error) {
+	if err := sess.CheckAgent(); err != nil {
+		return nil, err
+	}
+	timeout := time.Duration(in.Timeout) * time.Second
+	if in.Detach {
+		j, err := remote.MacDetach(ctx, sess, in.Command, in.Shell, timeout)
+		if err != nil {
+			return nil, err
+		}
+		return textResult(map[string]any{"job": j, "hint": "use the job tool (status/output/cancel) with this id"}), nil
+	}
+	r, err := remote.MacRun(ctx, sess, in.Command, in.Shell, timeout)
+	if err != nil {
+		return nil, err
+	}
+	res := textResult(r)
+	res.IsError = r.ExitCode != 0
+	return res, nil
 }
 
 // ---- job ----
@@ -578,6 +624,16 @@ func (s *Server) jobTool(ctx context.Context, in jobIn) (*mcp.CallToolResult, er
 		}
 		return textResult("ok: removed"), nil
 	case "cancel":
+		if sess.Resolved().IsMac() {
+			if err := sess.CheckAgent(); err != nil {
+				return nil, err
+			}
+			j, err := remote.JobCancelMac(ctx, sess, in.ID)
+			if err != nil {
+				return nil, err
+			}
+			return textResult(j), nil
+		}
 		var res *mcp.CallToolResult
 		err := sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
 			j, err := remote.JobCancel(o, in.ID)
@@ -598,7 +654,7 @@ type fileIn struct {
 	Machine    string  `json:"machine" jsonschema:"machine name"`
 	Action     string  `json:"action" jsonschema:"upload | download | list | search"`
 	LocalPath  string  `json:"local_path,omitempty" jsonschema:"path on the MCP server machine"`
-	RemotePath string  `json:"remote_path,omitempty" jsonschema:"Windows path on the remote machine (file, or directory for list/search)"`
+	RemotePath string  `json:"remote_path,omitempty" jsonschema:"path on the remote machine: a Windows path, or a POSIX path on macOS (~ allowed) (file, or directory for list/search)"`
 	Content    *string `json:"content,omitempty" jsonschema:"text content to upload instead of local_path"`
 	Append     bool    `json:"append,omitempty" jsonschema:"upload: append to remote_path instead of replacing it"`
 	Pattern    string  `json:"pattern,omitempty" jsonschema:"search: file name pattern with * and ?, e.g. *.log (searched recursively under remote_path)"`
@@ -614,6 +670,9 @@ func (s *Server) file(ctx context.Context, in fileIn) (*mcp.CallToolResult, erro
 	timeout := time.Duration(in.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 120 * time.Second
+	}
+	if sess.Resolved().IsMac() {
+		return s.fileMac(ctx, sess, in, timeout)
 	}
 	var res *mcp.CallToolResult
 	err = sess.Do(ctx, session.SourceAgent, func(o *session.Ops) error {
@@ -663,6 +722,53 @@ func (s *Server) file(ctx context.Context, in fileIn) (*mcp.CallToolResult, erro
 		return nil
 	})
 	return res, err
+}
+
+func (s *Server) fileMac(ctx context.Context, sess *session.Session, in fileIn, timeout time.Duration) (*mcp.CallToolResult, error) {
+	if err := sess.CheckAgent(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	switch strings.ToLower(in.Action) {
+	case "upload":
+		if in.LocalPath == "" && in.Content == nil {
+			return nil, errors.New("upload requires local_path or content")
+		}
+		r, err := remote.MacUpload(ctx, sess, in.LocalPath, in.Content, in.RemotePath, in.Append)
+		if err != nil {
+			return nil, err
+		}
+		if r.ExitCode != 0 {
+			return nil, fmt.Errorf("upload failed: %s", strings.TrimSpace(r.Stderr+" "+r.Stdout))
+		}
+		return textResult("ok: uploaded to " + r.Stdout), nil
+	case "download":
+		content, err := remote.MacDownload(ctx, sess, in.RemotePath, in.LocalPath)
+		if err != nil {
+			return nil, err
+		}
+		if in.LocalPath != "" {
+			return textResult("ok: saved to " + in.LocalPath), nil
+		}
+		if !utf8.Valid(content) {
+			return nil, errors.New("file is binary; pass local_path to save it")
+		}
+		return textResult(string(content)), nil
+	case "list":
+		entries, err := remote.MacList(ctx, sess, in.RemotePath)
+		if err != nil {
+			return nil, err
+		}
+		return textResult(entries), nil
+	case "search":
+		entries, truncated, err := remote.MacSearch(ctx, sess, in.RemotePath, in.Pattern, in.Limit)
+		if err != nil {
+			return nil, err
+		}
+		return textResult(map[string]any{"entries": entries, "truncated": truncated}), nil
+	}
+	return nil, fmt.Errorf("action must be upload, download, list or search")
 }
 
 // ---- session ----

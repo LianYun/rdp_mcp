@@ -70,6 +70,9 @@ type machineView struct {
 	Password        string   `json:"password,omitempty"`
 	PasswordCmd     string   `json:"password_cmd,omitempty"`
 	CertFingerprint string   `json:"cert_fingerprint,omitempty"`
+	Protocol        string   `json:"protocol,omitempty"`
+	SSHPort         int      `json:"ssh_port,omitempty"`
+	EnableSSH       *bool    `json:"enable_ssh,omitempty"`
 	machineOptsView
 }
 
@@ -117,6 +120,7 @@ func (a *API) configView() configView {
 			Host: m.Host, Username: m.Username, Domain: m.Domain,
 			Password: maskPassword(m.Password), PasswordCmd: maskPassword(m.PasswordCmd),
 			CertFingerprint: m.CertFingerprint, machineOptsView: optsView(m.MachineOptions),
+			Protocol: m.Protocol, SSHPort: m.SSHPort, EnableSSH: m.EnableSSH,
 		})
 	}
 	return out

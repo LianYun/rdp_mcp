@@ -15,6 +15,7 @@
 | M7a | `run_command detach` + `job` 工具（list/status/output/cancel/remove） | 长任务不阻塞，可查询输出与取消 | ✅ 有自动化测试，待真实 Windows 验证 |
 | M7b | 服务端 OCR（tesseract，`screenshot ocr` / `ocr_only`）；`file search`、`file upload append` | 模型能按文字定位可点击位置、按名称查找文件 | ✅ OCR 有真实 tesseract 测试；file search/append 待真实 Windows 验证 |
 | M7c | （不做）`system` 预设运维工具、`inspect` 窗口与 UIA 工具、`session lock`、工具描述中的运维配方 | — | ❌ 2026-11-04 决定不做；需要时用 `run_command` |
+| M9 | macOS 被控端（D21）：`protocol: vnc`；Go 实现的 VNC worker（ARD 认证、ZRLE）；SSH 执行命令 / 文件 / 剪贴板 / 粘贴输入；管理 API 与 UI 支持 | 模型能像操作 Windows 一样操作 Mac | 🟡 已实现，有自动化测试（假 RFB / SSH 服务端）；已在 macOS 27（Mac mini M6）上验证截图、鼠标、命令执行（含后台任务 / 取消 / 超时）与文件往返；粘贴输入、剪贴板待在无人占用的 Mac 上验证 |
 | M8 | 健壮性：`run_command` 先确认运行对话框已弹出再输入、避免终端窗口闪现；连接后立即被断开时快速重试；会话 / IPC / MCP 工具的自动化测试（fake worker） | | 🟡 已实现并有自动化测试（fake worker 模拟 RDP 与运行对话框）；`conhost --headless` 无窗口启动待真实 Windows 验证 |
 
 ## 桌面 UI

@@ -43,3 +43,13 @@ machines:
     height: 1440
     cert: fingerprint
     cert_fingerprint: "sha256:AB:CD:EF:..."
+
+  - name: mac-mini
+    description: "Mac mini，跑 iOS 构建"
+    protocol: vnc                    # macOS：屏幕共享（VNC）+ 远程登录（SSH）
+    host: 192.168.1.40
+    username: alice                  # Mac 账号短名，VNC 与 SSH 共用
+    password: ${MAC_MINI_PASSWORD}   # 写法与 Windows 机器相同；Linux 上放 ~/.remoter/.env
+    # port: 5900                     # 默认 5900，不继承 defaults.port
+    # ssh_port: 22
+    # enable_ssh: true               # false 时 run_command/file/clipboard 不可用

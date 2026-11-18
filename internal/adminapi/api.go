@@ -65,6 +65,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/machines/{name}", a.auth(a.updateMachine))
 	mux.Handle("DELETE /api/v1/machines/{name}", a.auth(a.deleteMachine))
 	mux.Handle("PUT /api/v1/machines/{name}/secret", a.auth(a.putSecret))
+	mux.Handle("POST /api/v1/machines/test", a.auth(a.testDefinition))
 	mux.Handle("POST /api/v1/machines/{name}/test", a.auth(a.testMachine))
 	mux.Handle("POST /api/v1/machines/{name}/cert", a.auth(a.answerCert))
 	mux.Handle("GET /api/v1/machines/{name}/stream", a.auth(a.stream))
@@ -236,7 +237,11 @@ func (a *API) trust(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rc := s.Resolved()
-	if err := a.Mgr.KnownHosts().Delete(rc.Host + ":" + strconv.Itoa(rc.Port)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	key := rc.Host + ":" + strconv.Itoa(rc.Port)
+	if rc.IsMac() {
+		key = session.SSHKnownHostsKey(rc.Host, rc.SSHPort)
+	}
+	if err := a.Mgr.KnownHosts().Delete(key); err != nil && !errors.Is(err, os.ErrNotExist) {
 		writeErr(w, 500, "internal", err.Error())
 		return
 	}

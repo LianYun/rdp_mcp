@@ -27,6 +27,7 @@
 {
   "name": "win1", "description": "…", "tags": ["dev"], "host": "10.0.0.5", "port": 3389,
   "username": "administrator", "enabled": true,
+  "protocol": "rdp|vnc", "platform": "windows|macos",
   "state": "idle|connecting|connected|reconnecting|failed",
   "control_mode": "agent|human|paused",
   "width": 1920, "height": 1080,            // 仅 connected 时
@@ -50,14 +51,15 @@
 | PUT | `/machines/{name}` | ✅ **整体替换**机器定义（未提供的可选字段从配置中移除，回退到 defaults）；改名用 `new_name` |
 | DELETE | `/machines/{name}?delete_secret=true` | ✅ 删除，断开会话；`delete_secret=true` 同时删除钥匙串条目 |
 | PUT | `/machines/{name}/secret` | ✅ `{password}` 写入钥匙串，配置改为 `password: keychain:<name>` |
-| POST | `/machines/{name}/test` | ✅ 用临时会话试连（不影响该机器现有会话，不弹证书确认）。body 可选覆盖：`{host, port, username, password, security, width, height}`（password 仅用于本次，不保存）。返回 `{ok, error?, width, height, freerdp, screenshot(base64 JPEG)}` |
+| POST | `/machines/test` | ✅ 用**未保存**的机器定义试连（UI 表单的“测试连接”），body 同 POST `/machines`，不写配置、不影响现有会话。`password` 为明文时只用于本次；省略或为空时使用同名已保存机器的密码。返回同下 |
+| POST | `/machines/{name}/test` | ✅ 用临时会话试连（不影响该机器现有会话，不弹证书确认）。body 可选覆盖：`{host, port, username, password, security, width, height, protocol}`（password 仅用于本次，不保存）。返回 `{ok, error?, width, height, freerdp, ssh?, screenshot(base64 JPEG)}`；macOS 机器另外试连 SSH，`ssh` 为 `"ok"` 或错误信息（SSH 失败时 `ok: false`） |
 | POST | `/machines/{name}/connect` · `/disconnect` · `/reconnect` | ✅ 返回 MachineInfo；连接失败 502 |
 | PUT | `/machines/{name}/control` | ✅ `{mode: agent\|human\|paused}` |
 | POST | `/control/emergency-stop` | ✅ 全部机器进入 `paused` |
 | POST | `/control/resume` | ✅ 所有 `paused` 的机器恢复为 `agent`（`human` 接管中的不变），返回 `{status, resumed: [机器名]}` |
 | GET | `/machines/{name}/screenshot?max_width=&format=png\|jpeg` | ✅ 单张截图（图片二进制，头 `X-Screen-Size: WxH`），不改变模型的坐标系 |
 | POST | `/machines/{name}/cert` | ✅ `{accept: once\|always\|reject}` 回应待确认证书（见 `pending_cert` / `cert_verify` 事件）；无待确认时 409。未在 2 分钟内回应则自动拒绝 |
-| POST | `/machines/{name}/trust` | ✅ 忘记已记录的证书指纹，下次连接重新信任（同 `remoter-mcp trust`） |
+| POST | `/machines/{name}/trust` | ✅ 忘记已记录的证书指纹（macOS 机器为 SSH 主机密钥），下次连接重新信任（同 `remoter-mcp trust`） |
 
 ### 机器定义（POST / PUT body）
 
@@ -70,7 +72,8 @@
   "width": 1920, "height": 1080, "security": "auto|nla|tls|rdp",
   "cert": "tofu|ignore|fingerprint", "cert_fingerprint": "…",
   "auto_connect": false, "idle_disconnect": "30m", "reconnect_attempts": 5,
-  "enable_drive": true, "enable_clipboard": true, "disable_wallpaper": true
+  "enable_drive": true, "enable_clipboard": true, "disable_wallpaper": true,
+  "protocol": "rdp|vnc", "ssh_port": 22, "enable_ssh": true   // 后两项仅 vnc（macOS）
 }
 ```
 

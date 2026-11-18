@@ -143,26 +143,30 @@ export default function MachineDetail() {
 
         <span className="mx-1 h-5 w-px bg-border" />
 
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          {t("detail.resolution")}
-          <Select
-            className="h-8 w-32 text-xs"
-            value={curRes}
-            disabled={!!busy}
-            onChange={(e) => setResize(e.target.value)}
-            data-testid="resolution-select"
-          >
-            {!curRes && <option value="">-</option>}
-            {resOptions.map((r) => (
-              <option key={r} value={r}>
-                {r.replace("x", "×")}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <Button size="sm" variant="outline" disabled={!takeover || !connected} onClick={() => viewRef.current?.sendCtrlAltDel()} data-testid="btn-cad" title={takeover ? "" : t("detail.clipboard_need_takeover")}>
-          <Keyboard /> {t("detail.ctrl_alt_del")}
-        </Button>
+        {machine.platform !== "macos" && (
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {t("detail.resolution")}
+            <Select
+              className="h-8 w-32 text-xs"
+              value={curRes}
+              disabled={!!busy}
+              onChange={(e) => setResize(e.target.value)}
+              data-testid="resolution-select"
+            >
+              {!curRes && <option value="">-</option>}
+              {resOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r.replace("x", "×")}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
+        {machine.platform !== "macos" && (
+          <Button size="sm" variant="outline" disabled={!takeover || !connected} onClick={() => viewRef.current?.sendCtrlAltDel()} data-testid="btn-cad" title={takeover ? "" : t("detail.clipboard_need_takeover")}>
+            <Keyboard /> {t("detail.ctrl_alt_del")}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
