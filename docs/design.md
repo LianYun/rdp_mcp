@@ -257,7 +257,7 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 ### 6.7 配置管理
 
 - 服务是配置的唯一写入方：UI 经管理 API 修改，服务校验后写回 YAML（保留注释与未知字段）。
-- 文件监听：用户手动编辑 YAML 后自动热加载；校验失败保留旧配置并发出 `config_error` 事件。
+- 文件监听：用户手动编辑 YAML 或 `.env` 后自动热加载（`.env` 中删除的变量会被移除，真实进程环境变量始终优先）；校验失败保留旧配置并发出 `config_error` 事件。
 - 热加载影响：新增机器立即可用；删除机器断开其会话；连接参数变化在下次连接生效（UI 提示可重连）；`server.listen` 变化需重启服务。
 
 ### 6.8 事件总线
@@ -360,3 +360,4 @@ remoter/
 | 2026-11-04 | v0.3.1 | 真实 Windows 11 测试后的修复：支持 `.env`；连接后等待登录通知与画面稳定再返回（避免首帧空白/锁屏过渡画面）；屏蔽 FreeRDP 自身证书库的误导性告警；区域截图改为“放大查看”且不改变坐标系；修复 `run_command` 退出码丢失（需在进程存活时访问 `$p.Handle`）；输出统一为 LF |
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `remoter-mcp trust` 命令 |
 | 2026-11-13 | v0.6 | 支持 macOS 被控端（D21，§5a）：`protocol: vnc`，VNC（Go 实现的 `remoter-mcp vnc-worker`，复用 worker IPC）+ SSH（命令、文件、剪贴板、粘贴输入）。先用 `tools/vncprobe` 在 macOS 27 上实测：ARD 认证、ZRLE、坐标 1:1、Command = `Super_L` 可用；剪贴板消息、光标伪编码不可用；拼音输入法会改写 ASCII 按键。未找到 `remoter-worker` 时服务不再拒绝启动（只影响 RDP 机器） |
+| 2026-11-18 | v0.6.1 | `.env` 随配置热加载；`${VAR}` 未定义或为空时连接报错并给出变量名（此前会用空密码登录，表现为难以理解的认证失败）；管理 API 增加 `POST /machines/test`，UI 不保存即可测试连接 |

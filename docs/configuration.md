@@ -50,7 +50,7 @@ Mac 机器的密码写法与 Windows 完全相同（下文四种写法都可用�
 
 ### .env 文件
 
-服务启动时依次读取配置文件同目录的 `.env` 和 `data_dir` 下的 `.env`（通常都是 `~/.remoter/.env`），格式 `KEY=VALUE`（支持 `#` 注释、`export ` 前缀和引号）。进程环境里已有的同名变量优先。修改 `.env` 后需重启服务。文件权限过宽时会警告，建议 `chmod 600 ~/.remoter/.env`。
+服务启动时依次读取配置文件同目录的 `.env` 和 `data_dir` 下的 `.env`（通常都是 `~/.remoter/.env`），格式 `KEY=VALUE`（支持 `#` 注释、`export ` 前缀和引号）。进程环境里已有的同名变量优先。服务运行中修改 `.env` 会自动重新加载（与 `configs.yaml` 一样每 2 秒检查一次），密码与 `server.mcp_token` 立即按新值生效；`server.admin_token`、`listen` 等需重启的字段仍需重启。配置引用的 `${VAR}` 未定义或为空时，连接会直接报错并指出变量名，而不是用空密码去登录。文件权限过宽时会警告，建议 `chmod 600 ~/.remoter/.env`。
 
 ## 字段
 

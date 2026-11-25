@@ -105,7 +105,7 @@ chmod 600 ~/.remoter/.env            # 权限过宽时服务会警告
 - 也可以直接在启动服务的环境里 `export WIN1_PASSWORD=...`，进程环境中已有的同名变量优先于 `.env`。
 - Docker 中用 `docker run -e WIN1_PASSWORD=...`，或把 `.env` 放进挂载的数据目录。
 - `${VAR}` 同样可用于 `server.mcp_token` 等字段。
-- 修改 `.env` 后需重启服务（`remoter-mcp stop` 后重新 `serve`，或在桌面应用里重启）。
+- 服务运行中修改 `.env` 会自动重新加载（约 2 秒内生效），无需重启。
 
 ### 5. 检查并启动
 

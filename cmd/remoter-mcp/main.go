@@ -325,14 +325,35 @@ func mcpAuth(token func() string, next http.Handler) http.Handler {
 	})
 }
 
-// watchConfig polls the config file and applies valid changes.
+// watchConfig polls the config file and the .env files and applies valid changes.
+// .env edits update the process environment, so ${VAR} references (machine passwords,
+// server.mcp_token) pick them up without a restart.
 func watchConfig(ctx context.Context, path, listenOverride, workerOverride string, mgr *session.Manager,
 	bus *events.Bus, log *slog.Logger, apply func(*config.Config)) {
-	var lastMod time.Time
-	var lastSize int64 = -1
-	if st, err := os.Stat(path); err == nil {
-		lastMod, lastSize = st.ModTime(), st.Size()
+	dataDir := mgr.Config().Server.EffectiveDataDir()
+	stamp := func() string {
+		var b strings.Builder
+		for _, p := range append([]string{path}, config.DotEnvFiles(path, dataDir)...) {
+			if st, err := os.Stat(p); err == nil {
+				fmt.Fprintf(&b, "%s|%d|%d;", p, st.ModTime().UnixNano(), st.Size())
+			} else {
+				fmt.Fprintf(&b, "%s|-;", p)
+			}
+		}
+		return b.String()
 	}
+	envStamp := func() string {
+		var b strings.Builder
+		for _, p := range config.DotEnvFiles(path, dataDir) {
+			if st, err := os.Stat(p); err == nil {
+				fmt.Fprintf(&b, "%d|%d;", st.ModTime().UnixNano(), st.Size())
+			} else {
+				b.WriteString("-;")
+			}
+		}
+		return b.String()
+	}
+	last, lastEnv := stamp(), envStamp()
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 	for {
@@ -341,14 +362,19 @@ func watchConfig(ctx context.Context, path, listenOverride, workerOverride strin
 			return
 		case <-t.C:
 		}
-		st, err := os.Stat(path)
-		if err != nil {
+		cur := stamp()
+		if cur == last {
 			continue
 		}
-		if st.ModTime().Equal(lastMod) && st.Size() == lastSize {
-			continue
+		last = cur
+		if e := envStamp(); e != lastEnv {
+			lastEnv = e
+			_, warnings := config.LoadDotEnv(path, dataDir)
+			for _, w := range warnings {
+				log.Warn(".env: " + w)
+			}
+			log.Info(".env reloaded")
 		}
-		lastMod, lastSize = st.ModTime(), st.Size()
 		cfg, err := config.Load(path)
 		if err == nil {
 			if listenOverride != "" {

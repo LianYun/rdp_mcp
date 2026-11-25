@@ -426,6 +426,13 @@ func ResolvePassword(ctx context.Context, m Machine, keychainGet func(key string
 		}
 		return pw, nil
 	default:
+		// An unset reference would silently become an empty password and show up as a
+		// confusing authentication failure; report it instead.
+		for _, ref := range envRef.FindAllStringSubmatch(m.Password, -1) {
+			if v, ok := os.LookupEnv(ref[1]); !ok || v == "" {
+				return "", fmt.Errorf("password references ${%s}, which is not set or empty: define it in the environment or in .env next to the config / in the data directory", ref[1])
+			}
+		}
 		return expandEnv(m.Password), nil
 	}
 }
