@@ -51,6 +51,19 @@ async fn service_open_logs() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(service::open_logs_dir).await.map_err(|e| e.to_string())?
 }
 
+/// macOS：打开“系统设置 → 隐私与安全性 → 本地网络”。
+#[tauri::command]
+fn open_local_network_settings() -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("only available on macOS".into());
+    }
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
+        .status()
+        .map_err(|e| format!("open: {e}"))
+        .and_then(|s| if s.success() { Ok(()) } else { Err(format!("open exited with {s}")) })
+}
+
 #[tauri::command]
 fn app_settings_get(state: tauri::State<SettingsState>) -> AppSettings {
     state.0.lock().unwrap().clone()
@@ -138,6 +151,7 @@ fn main() {
             service_restart,
             service_logs_path,
             service_open_logs,
+            open_local_network_settings,
             app_settings_get,
             app_settings_set,
             app_info,

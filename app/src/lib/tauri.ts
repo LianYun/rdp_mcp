@@ -81,6 +81,12 @@ export async function openLogsDir(): Promise<void> {
   await invoke<void>("service_open_logs");
 }
 
+/** macOS：打开“系统设置 → 隐私与安全性 → 本地网络”（浏览器模式下无效果）。 */
+export async function openLocalNetworkSettings(): Promise<void> {
+  if (!isTauri()) return;
+  await invoke<void>("open_local_network_settings");
+}
+
 /** 保存二进制/文本文件：Tauri 下弹出保存对话框；浏览器下触发下载。返回是否已保存。 */
 export async function saveBytes(defaultName: string, data: Blob): Promise<boolean> {
   if (isTauri()) {

@@ -17,6 +17,12 @@ export interface PendingCert {
 export type Protocol = "rdp" | "vnc";
 export type Platform = "windows" | "macos";
 
+/**
+ * 连接失败的可能原因（服务端诊断）：
+ * - `local_network`：macOS 15+ 上目标在本机所在子网，但未授予“本地网络”权限。
+ */
+export type ErrorHint = "local_network" | (string & {});
+
 export interface MachineInfo {
   name: string;
   description?: string;
@@ -32,6 +38,8 @@ export interface MachineInfo {
   width?: number;
   height?: number;
   last_error?: string;
+  /** last_error 的可能原因（服务端诊断），见 ErrorHint。 */
+  hint?: ErrorHint;
   last_activity?: string;
   connected_at?: string;
   viewers: number;
@@ -158,6 +166,7 @@ export interface TestRequest {
 export interface TestResult {
   ok: boolean;
   error?: string;
+  hint?: ErrorHint;
   width?: number;
   height?: number;
   freerdp?: string;
@@ -203,6 +212,7 @@ export interface MachineStateEvent {
   machine: string;
   state: MachineState;
   error?: string;
+  hint?: ErrorHint;
   /** 服务端发送 [width, height]；也兼容 "WxH" 字符串。 */
   resolution?: [number, number] | string;
 }

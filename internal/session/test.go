@@ -13,6 +13,7 @@ import (
 type TestResult struct {
 	OK         bool   `json:"ok"`
 	Error      string `json:"error,omitempty"`
+	Hint       string `json:"hint,omitempty"` // probable cause of error, e.g. "local_network"
 	Width      int    `json:"width,omitempty"`
 	Height     int    `json:"height,omitempty"`
 	FreeRDP    string `json:"freerdp,omitempty"`
@@ -39,6 +40,9 @@ func (m *Manager) TestConnect(ctx context.Context, mc config.Machine) *TestResul
 	s.op.Unlock()
 	if err != nil {
 		res.Error = err.Error()
+		s.mu.Lock()
+		res.Hint = s.lastHint
+		s.mu.Unlock()
 		return res
 	}
 	defer s.Disconnect()

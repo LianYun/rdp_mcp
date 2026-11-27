@@ -32,6 +32,7 @@
   "control_mode": "agent|human|paused",
   "width": 1920, "height": 1080,            // 仅 connected 时
   "last_error": "…", "last_activity": "RFC3339", "connected_at": "RFC3339",
+  "hint": "local_network",                   // 可选：服务端对 last_error 原因的诊断（见下）
   "viewers": 0,                              // 正在观看实时画面的连接数
   "pending_cert": {                          // 有待确认证书时
     "host": "…", "port": 3389, "fingerprint": "ab:cd:…", "subject": "…", "issuer": "…", "reason": "…"
@@ -40,6 +41,12 @@
 ```
 
 机器的完整配置（含分辨率、安全等选项）从 `GET /config` 的 `machines[]` 取。
+
+**失败原因提示（`hint`）**：连接失败时服务端会尝试诊断原因，结果放在 `MachineInfo.hint`、试连结果的 `hint` 与 `machine_state` 事件的 `hint` 中（无诊断结果时省略；下一次状态变化时清除）。目前只有一种：
+
+| hint | 条件 | 含义 |
+|---|---|---|
+| `local_network` | macOS 15+；错误是 TCP 层失败（`ERRCONNECT_CONNECT_FAILED`、`no route to host` 等）；目标解析到本机直连子网（Wi-Fi/以太网接口所在网段，不含 VPN 隧道）或链路本地地址；服务进程自己再试连该端口仍立即失败（能连上、被拒绝、超时都不算——同网段主机离线时表现为超时，而被拦截时是立即失败） | 多半是启动服务的程序（UI 启动时为 Remoter）没有“本地网络”权限。`last_error` 末尾同时追加一句英文说明，MCP 客户端也能看到 |
 
 ### 接口
 
@@ -52,7 +59,7 @@
 | DELETE | `/machines/{name}?delete_secret=true` | ✅ 删除，断开会话；`delete_secret=true` 同时删除钥匙串条目 |
 | PUT | `/machines/{name}/secret` | ✅ `{password}` 写入钥匙串，配置改为 `password: keychain:<name>` |
 | POST | `/machines/test` | ✅ 用**未保存**的机器定义试连（UI 表单的“测试连接”），body 同 POST `/machines`，不写配置、不影响现有会话。`password` 为明文时只用于本次；省略或为空时使用同名已保存机器的密码。返回同下 |
-| POST | `/machines/{name}/test` | ✅ 用临时会话试连（不影响该机器现有会话，不弹证书确认）。body 可选覆盖：`{host, port, username, password, security, width, height, protocol}`（password 仅用于本次，不保存）。返回 `{ok, error?, width, height, freerdp, ssh?, screenshot(base64 JPEG)}`；macOS 机器另外试连 SSH，`ssh` 为 `"ok"` 或错误信息（SSH 失败时 `ok: false`） |
+| POST | `/machines/{name}/test` | ✅ 用临时会话试连（不影响该机器现有会话，不弹证书确认）。body 可选覆盖：`{host, port, username, password, security, width, height, protocol}`（password 仅用于本次，不保存）。返回 `{ok, error?, hint?, width, height, freerdp, ssh?, screenshot(base64 JPEG)}`；macOS 机器另外试连 SSH，`ssh` 为 `"ok"` 或错误信息（SSH 失败时 `ok: false`） |
 | POST | `/machines/{name}/connect` · `/disconnect` · `/reconnect` | ✅ 返回 MachineInfo；连接失败 502 |
 | PUT | `/machines/{name}/control` | ✅ `{mode: agent\|human\|paused}` |
 | POST | `/control/emergency-stop` | ✅ 全部机器进入 `paused` |
@@ -101,7 +108,7 @@
 
 | event | data |
 |---|---|
-| `machine_state` | `{machine, state, error, resolution?}` |
+| `machine_state` | `{machine, state, error, hint?, resolution?}` |
 | `control_mode` | `{machine, mode}` |
 | `tool_call` | `{id, time, phase: start\|end, tool, machine, args, duration_ms?, ok?, summary?, thumb?}`（`thumb` 为缩略图 URL 路径） |
 | `cert_verify` | `{machine, host, port, fingerprint, subject, issuer, reason, pending: true}` |

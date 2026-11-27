@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Monitor } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ControlBadge, StateBadge } from "@/components/StatusDot";
+import { ErrorHintCallout } from "@/components/ErrorHintCallout";
 import { useT } from "@/i18n";
 import { timeAgo } from "@/lib/utils";
 import { useLive } from "@/stores/live";
@@ -65,6 +66,7 @@ export function MachineCard({ m }: { m: MachineInfo }) {
             {t("machine.last_activity")}: {m.last_activity ? t("common.ago", { d: timeAgo(m.last_activity) }) : "-"}
           </div>
           {m.last_error && m.state === "failed" && <div className="truncate text-xs text-destructive">{m.last_error}</div>}
+          {m.state === "failed" && <ErrorHintCallout hint={m.hint} compact />}
         </div>
       </Card>
     </Link>

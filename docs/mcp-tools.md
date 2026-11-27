@@ -11,6 +11,7 @@
 - 控制模式：机器处于 `human`（人工接管）或 `paused` 时，除 `list_machines`、`screenshot`、`session status` 外的工具返回错误"机器正在被人工接管/已暂停"。`enabled: false` 的机器不出现在列表中。
 - 截图默认合成鼠标指针（`server.draw_cursor`）。
 - 错误以 MCP 工具错误返回（`isError: true`），文本说明原因与建议（如"会话已锁定，请先截图确认"）。
+- 连接失败且服务端诊断出原因时，错误文本（以及 `list_machines` 的 `last_error`）末尾追加英文说明。目前只有一种：macOS 15+ 上目标在本机局域网、但未授予“本地网络”权限时，提示在「系统设置 → 隐私与安全性 → 本地网络」中允许启动 remoter-mcp 的程序（Remoter 或终端），模型应把这句转告用户，而不是反复重试（见 `admin-api.md` 的 `hint`）。
 
 ## macOS 机器（`protocol: vnc`，design.md D21 / §5a）
 

@@ -85,6 +85,8 @@ Tauri 打包后 sidecar 去掉 triple 后缀，与应用可执行文件同目录
 
 **hardened runtime 与库校验**：Tauri 重新签名 sidecar 时会带上 hardened runtime，此时 dyld 会拒绝加载与进程 Team ID 不同的 dylib（ad-hoc 签名的库没有 Team ID），`remoter-worker` 启动即 abort（`mapping process and mapped file have different Team IDs`）。因此 `app/src-tauri/entitlements.plist` 声明了 `com.apple.security.cs.disable-library-validation`，由 `tauri.conf.json` 的 `bundle.macOS.entitlements` 引用。改用 Developer ID 签名所有 dylib 后可去掉这一项。打包后务必实际启动一次验证（见 §6.4），`codesign --verify` 通过不代表 dyld 肯加载。
 
+**本地网络权限**：macOS 15+ 访问同一子网 / 链路本地地址需要“本地网络”权限，sidecar 由 Remoter 启动，权限记在 Remoter 名下；未授权时 FreeRDP 只报 `ERRCONNECT_CONNECT_FAILED`（worker 日志里是 `get_next_addrinfo … Couldn't get socket ip address`），走网关的机器不受影响。`app/src-tauri/Info.plist` 声明了 `NSLocalNetworkUsageDescription`（系统授权弹窗里的说明），Tauri 打包时自动合并进应用的 Info.plist。服务端会诊断这种失败并返回 `hint: local_network`，UI 据此引导用户授权（见 `ui.md` §5）。ad-hoc 签名的应用每次重新打包签名都会变，系统可能要求重新授权。
+
 首次打开：
 
 - 把 `Remoter.app` 拖到「应用程序」后，在访达中**右键 → 打开 → 打开**；或

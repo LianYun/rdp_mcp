@@ -16,6 +16,7 @@ import (
 
 	"github.com/LianYun/rdp_mcp/internal/config"
 	"github.com/LianYun/rdp_mcp/internal/imaging"
+	"github.com/LianYun/rdp_mcp/internal/netcheck"
 	"github.com/LianYun/rdp_mcp/internal/worker"
 )
 
@@ -30,6 +31,7 @@ type Session struct {
 	state        State
 	mode         ControlMode
 	lastErr      string
+	lastHint     string // netcheck hint code for lastErr (e.g. "local_network")
 	w            *worker.Client
 	gen          int
 	width        int
@@ -74,6 +76,7 @@ type Info struct {
 	Width        int         `json:"width,omitempty"`
 	Height       int         `json:"height,omitempty"`
 	LastError    string      `json:"last_error,omitempty"`
+	Hint         string      `json:"hint,omitempty"` // probable cause of last_error, e.g. "local_network"
 	LastActivity *time.Time  `json:"last_activity,omitempty"`
 	ConnectedAt  *time.Time  `json:"connected_at,omitempty"`
 	Viewers      int         `json:"viewers"`
@@ -95,7 +98,7 @@ func (s *Session) Info() Info {
 		Name: s.name, Description: s.cfg.Description, Tags: s.cfg.Tags,
 		Host: s.cfg.Host, Port: s.cfg.Port, Username: s.cfg.Username, Enabled: s.cfg.IsEnabled,
 		Protocol: s.cfg.Protocol, Platform: s.cfg.Platform(),
-		State: s.state, ControlMode: s.mode, LastError: s.lastErr, Viewers: len(s.viewers),
+		State: s.state, ControlMode: s.mode, LastError: s.lastErr, Hint: s.lastHint, Viewers: len(s.viewers),
 	}
 	if s.state == StateConnected {
 		in.Width, in.Height = s.width, s.height
@@ -130,13 +133,19 @@ func (s *Session) SetMode(mode ControlMode) {
 	}
 }
 
-func (s *Session) setState(st State, errMsg string) {
+func (s *Session) setState(st State, errMsg string) { s.setStateHint(st, errMsg, "") }
+
+// setStateHint is setState with a netcheck hint describing the probable cause of errMsg.
+func (s *Session) setStateHint(st State, errMsg, hint string) {
 	s.mu.Lock()
 	s.state = st
 	if errMsg != "" || st == StateConnected {
-		s.lastErr = errMsg
+		s.lastErr, s.lastHint = errMsg, hint
 	}
 	info := map[string]any{"machine": s.name, "state": st, "error": errMsg}
+	if hint != "" {
+		info["hint"] = hint
+	}
 	if st == StateConnected {
 		info["resolution"] = []int{s.width, s.height}
 	}
@@ -175,17 +184,21 @@ func (s *Session) ShareDir() string { return s.shareDir() }
 // connect starts a worker and connects. Caller holds s.op.
 func (s *Session) connect(ctx context.Context) error { return s.connectAttempt(ctx, true) }
 
-// TakenOver reports whether a FreeRDP error code means the Windows session was ended
+const (
+	errinfoClass        = 0x00010000 // FREERDP_ERROR_ERRINFO_CLASS << 16
+	errinfoLogoffByUser = errinfoClass | 0x0C
+)
+
+// TakenOver reports whether a FreeRDP error code means the remote session was ended
 // or taken over on the server side (another RDP connection, logoff, admin disconnect).
 // Reconnecting automatically would just kick the other side off again.
 func TakenOver(code uint32) bool {
-	const errinfo = 0x00010000 // FREERDP_ERROR_ERRINFO_CLASS << 16
 	switch code {
-	case errinfo | 0x01, // ERRINFO_RPC_INITIATED_DISCONNECT
-		errinfo | 0x02, // ERRINFO_RPC_INITIATED_LOGOFF
-		errinfo | 0x05, // ERRINFO_DISCONNECTED_BY_OTHERCONNECTION
-		errinfo | 0x0B, // ERRINFO_RPC_INITIATED_DISCONNECT_BYUSER
-		errinfo | 0x0C: // ERRINFO_LOGOFF_BY_USER
+	case errinfoClass | 0x01, // ERRINFO_RPC_INITIATED_DISCONNECT
+		errinfoClass | 0x02, // ERRINFO_RPC_INITIATED_LOGOFF
+		errinfoClass | 0x05, // ERRINFO_DISCONNECTED_BY_OTHERCONNECTION
+		errinfoClass | 0x0B, // ERRINFO_RPC_INITIATED_DISCONNECT_BYUSER
+		errinfoLogoffByUser: // ERRINFO_LOGOFF_BY_USER
 		return true
 	}
 	return false
@@ -193,21 +206,38 @@ func TakenOver(code uint32) bool {
 
 // TakenOverError is returned when the server ended the session because another
 // client took it over; callers must not retry automatically.
-type TakenOverError struct{ Reason string }
+type TakenOverError struct {
+	Reason string
+	Msg    string // overrides the default message
+}
 
-func (e *TakenOverError) Error() string { return takenOverMsg(e.Reason) }
+func (e *TakenOverError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return takenOverMsg(e.Reason)
+}
 
 func takenOverMsg(reason string) string {
-	return "the Windows session was taken over or ended on the server (" + reason +
+	return "the remote session was taken over or ended on the server (" + reason +
 		"); another RDP client is probably using this machine. Not reconnecting automatically; " +
 		"the next tool call will reconnect and take the session back"
+}
+
+// logoffAtConnectMsg: the server logged the session off within a moment of connecting,
+// and the one quick retry did not help (or was not allowed).
+func logoffAtConnectMsg(reason string) string {
+	return "the server ended the session right after connecting (" + reason + "). " +
+		"On Windows another RDP client may have taken the session; on Linux (xrdp) the desktop " +
+		"session probably failed to start, e.g. the same user is logged in on the local console " +
+		"(see the server's xrdp-sesman log). Not reconnecting automatically; the next tool call will try again"
 }
 
 func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) error {
 	s.mu.Lock()
 	r := s.cfg
 	s.manual = false
-	s.lastErr = ""
+	s.lastErr, s.lastHint = "", ""
 	s.mu.Unlock()
 	s.setState(StateConnecting, "")
 	log := s.m.opts.Logger.With("machine", s.name)
@@ -298,8 +328,12 @@ func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) erro
 			msg = s.lastErr + " (" + msg + ")"
 		}
 		s.mu.Unlock()
-		s.setState(StateFailed, msg)
-		log.Warn("connect failed", "err", msg)
+		hint := netcheck.Diagnose(r.Host, r.Port, msg)
+		if hint != "" {
+			msg += "; " + netcheck.Explain(hint, r.Host)
+		}
+		s.setStateHint(StateFailed, msg, hint)
+		log.Warn("connect failed", "err", msg, "hint", hint)
 		return errors.New(msg)
 	}
 	var size struct{ Width, Height int }
@@ -326,6 +360,24 @@ func (s *Session) connectAttempt(ctx context.Context, allowQuickRetry bool) erro
 			return ctx.Err()
 		}
 		if code, reason := w.Disconnect(); TakenOver(code) {
+			if code == errinfoLogoffByUser {
+				// A client taking the session over makes the server end the *other*
+				// connection (DISCONNECTED_BY_OTHERCONNECTION etc.), not log off the one
+				// that is just coming up. xrdp sends this when the desktop session fails
+				// to start, often transiently, so retry once (also for test connections).
+				if allowQuickRetry {
+					log.Warn("server logged the session off right after connecting; retrying once", "reason", reason)
+					select {
+					case <-time.After(1200 * time.Millisecond):
+						return s.connectAttempt(ctx, false)
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				msg := logoffAtConnectMsg(reason)
+				s.setState(StateFailed, msg)
+				return &TakenOverError{Reason: reason, Msg: msg}
+			}
 			s.setState(StateFailed, takenOverMsg(reason))
 			return &TakenOverError{Reason: reason}
 		}

@@ -27,6 +27,7 @@ Remoter 桌面应用是 remoter-mcp 服务的管理客户端：管理机器、�
 | `service_restart` | stop + start |
 | `service_logs_path` | 返回日志目录 |
 | `service_open_logs` | 在 Finder/文件管理器中打开日志目录（`open` / `xdg-open`） |
+| `open_local_network_settings` | macOS：打开「系统设置 → 隐私与安全性 → 本地网络」（`open x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork`） |
 | `app_settings_get/set` | UI 自身偏好（自动启动服务、退出后服务继续运行、关闭到托盘、语言），存 `app_config_dir/settings.json`；**不是**服务配置，服务配置只走管理 API |
 | `app_info` | 应用版本、数据目录、是否找到内置 sidecar |
 | `save_file` | 保存截图等二进制文件（目标路径来自 `dialog` 插件的保存对话框） |
@@ -84,6 +85,7 @@ Remoter 桌面应用是 remoter-mcp 服务的管理客户端：管理机器、�
 
 - 证书确认（`cert_verify` 事件 / `pending_cert`）：弹出对话框显示指纹、主题、颁发者与原因，选"仅本次/始终信任/拒绝"；2 分钟未响应服务端自动拒绝。对话框不可点外部关闭。
 - 机器连接失败、服务异常退出：系统通知 + 托盘图标变色。
+- 连接失败的原因提示（`hint`，见 `admin-api.md`）：`local_network` 时，在“测试连接”结果和机器详情页显示提示框（`ErrorHintCallout`），说明“目标与本机在同一局域网，macOS 需要单独授权”，并按步骤引导：在「本地网络」中打开 Remoter（服务不是 `ui-sidecar` 时改为“启动 remoter-mcp 的程序，如终端”）→ 列表里没有 Remoter 时重启服务再连一次以触发系统授权弹窗 → 重新连接；按钮“打开本地网络设置”“重启服务”（仅 `ui-sidecar`，浏览器模式不显示按钮）。概览页机器卡片只显示一行提示。
 - 所有破坏性操作（删除机器、停止服务、重新生成 token、改分辨率）需二次确认；紧急停止必须一键生效，不确认。
 - 实时状态以 SSE `snapshot` 为基线，之后按事件增量更新（`machine_state` / `control_mode` / `tool_call` / `cert_verify` / `config_changed` …）；服务重启或重新附着后重新订阅。
 

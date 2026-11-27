@@ -315,6 +315,7 @@ idle ─connect→ connecting ─ok→ connected ─断线→ reconnecting ─ok
 5. `run_command` 依赖 GUI 状态。
 6. 实时画面为 JPEG 帧流，高帧率高分辨率下 CPU 占用较高（默认 10fps）。
 7. macOS：屏幕共享控制的是物理控制台（与本地用户共用屏幕）；无显示器的 Mac mini 需 HDMI 欺骗器或虚拟显示器才有正常分辨率；开启 FileVault 的 Mac 重启后停在解锁界面，VNC 与 SSH 都不可用；不支持改分辨率；截图中的光标是服务端合成的（只反映经服务发出的移动）；`keyboard type` 会短暂占用剪贴板（只恢复文本内容）；SSH 会话默认无权访问“桌面/文稿/下载”等 TCC 保护目录，需在远程登录设置中开启“允许远程用户完全访问磁盘”。
+8. 主控端为 macOS 15+ 时，连接同一子网的机器需要授予启动服务的程序（Remoter 或终端）“本地网络”权限；服务会诊断并提示（`hint: local_network`）。
 
 ## 12. 测试策略
 
@@ -361,3 +362,4 @@ remoter/
 | 2026-11-04 | v0.3 | 首版实现（M1–M3 完成，M4–M6 部分）。实现细节：每次连接/重连都启动新 worker 进程；证书由服务决策，worker 永不让 FreeRDP 持久化证书（FreeRDP 配置目录指向 `<data_dir>/freerdp`）；启用 RemoteFX 作为非 GFX 服务器的后备编码；配置热加载采用 2 秒轮询（无额外依赖）；IPC JSON 整数必须编码为整数；新增 `remoter-mcp trust` 命令 |
 | 2026-11-13 | v0.6 | 支持 macOS 被控端（D21，§5a）：`protocol: vnc`，VNC（Go 实现的 `remoter-mcp vnc-worker`，复用 worker IPC）+ SSH（命令、文件、剪贴板、粘贴输入）。先用 `tools/vncprobe` 在 macOS 27 上实测：ARD 认证、ZRLE、坐标 1:1、Command = `Super_L` 可用；剪贴板消息、光标伪编码不可用；拼音输入法会改写 ASCII 按键。未找到 `remoter-worker` 时服务不再拒绝启动（只影响 RDP 机器） |
 | 2026-11-18 | v0.6.1 | `.env` 随配置热加载；`${VAR}` 未定义或为空时连接报错并给出变量名（此前会用空密码登录，表现为难以理解的认证失败）；管理 API 增加 `POST /machines/test`，UI 不保存即可测试连接 |
+| 2026-11-27 | v0.6.2 | macOS 15+ “本地网络”权限：Remoter 未授权时连不上同一子网的机器（只报 `ERRCONNECT_CONNECT_FAILED`，走网关的机器正常）。新增 `internal/netcheck` 诊断这种失败（TCP 层错误 + 目标在直连子网 + 服务进程自己再试连仍失败），在 `MachineInfo` / 试连结果 / `machine_state` 事件中返回 `hint: local_network`，并在错误文本末尾追加英文说明；UI 显示授权引导（打开本地网络设置、重启服务）；应用 Info.plist 增加 `NSLocalNetworkUsageDescription`。xrdp（Linux）在桌面会话启动失败时会在连接后立刻回 `ERRINFO_LOGOFF_BY_USER`（0xC），且常常是暂时的，此前被当作“被其他客户端接管”而不重试、并报 Windows 专属的提示：现在连接后短窗口内（尚未进入 connected）收到 0xC 时重试一次（测试连接也重试），仍失败才置 failed，提示区分 Windows / xrdp 的可能原因；其他接管码（0x1/0x2/0x5/0xB）与已连接后的 0xC 维持 v0.4.2 的不重试；接管提示改为不限 Windows 的措辞 |

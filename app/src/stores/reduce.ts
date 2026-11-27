@@ -56,7 +56,7 @@ export function reduceEvent(s: LiveState, ev: ServerEvent): LiveState {
       return { ...s, machines: ev.data.machines, certs, stopping: false };
     }
     case "machine_state": {
-      const { machine, state, error, resolution } = ev.data;
+      const { machine, state, error, hint, resolution } = ev.data;
       const certs = { ...s.certs };
       if (state === "connected" || state === "failed") delete certs[machine];
       return {
@@ -65,6 +65,7 @@ export function reduceEvent(s: LiveState, ev: ServerEvent): LiveState {
         machines: patchMachine(s.machines, machine, {
           state,
           last_error: error || undefined,
+          hint: hint || undefined,
           ...(state === "connected" ? parseResolution(resolution) : {}),
         }),
       };

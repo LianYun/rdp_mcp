@@ -257,3 +257,47 @@ func TestTakeoverRightAfterConnectNoRetry(t *testing.T) {
 		t.Fatalf("retried after takeover: %d connects", n)
 	}
 }
+
+// xrdp logs the session off right after connecting when the desktop session fails to
+// start (often transiently): that is retried once, unlike a real takeover.
+func TestLogoffRightAfterConnectRetriesOnce(t *testing.T) {
+	t.Setenv("FAKE_WORKER_DROP", "logoff-once")
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	if err := s.Connect(context.Background()); err != nil || s.State() != StateConnected {
+		t.Fatalf("want connected after one retry, got %v %s", err, s.State())
+	}
+	if n := countConnects(t, logPath); n != 2 {
+		t.Fatalf("want 2 connects, got %d", n)
+	}
+}
+
+func TestLogoffRightAfterConnectGivesUp(t *testing.T) {
+	t.Setenv("FAKE_WORKER_DROP", "logoff")
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	err := s.Connect(context.Background())
+	var tko *TakenOverError
+	if !errors.As(err, &tko) || !strings.Contains(err.Error(), "right after connecting") || !strings.Contains(err.Error(), "xrdp") {
+		t.Fatalf("want logoff-at-connect TakenOverError, got %v", err)
+	}
+	if s.State() != StateFailed || !strings.Contains(err.Error(), s.Info().LastError) {
+		t.Fatalf("state=%s last_error=%q", s.State(), s.Info().LastError)
+	}
+	if n := countConnects(t, logPath); n != 2 {
+		t.Fatalf("want exactly one retry (2 connects), got %d", n)
+	}
+}
+
+func TestLogoffRightAfterConnectTestConnectionRetries(t *testing.T) {
+	t.Setenv("FAKE_WORKER_DROP", "logoff-once")
+	m, logPath := newFakeManager(t, oneMachine)
+	s, _ := m.Get("m1")
+	res := m.TestConnect(context.Background(), s.Resolved().Machine)
+	if !res.OK {
+		t.Fatalf("test connection failed: %s", res.Error)
+	}
+	if n := countConnects(t, logPath); n != 2 {
+		t.Fatalf("want 2 connects, got %d", n)
+	}
+}

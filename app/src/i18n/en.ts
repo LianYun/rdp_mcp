@@ -271,4 +271,15 @@ export const en: Record<keyof typeof zh, string> = {
   "settings.raw.reload": "Reload",
   "settings.raw.save": "Save YAML",
   "settings.raw.saved": "YAML saved",
+
+  "hint.local_network.short": "macOS Local Network permission may be missing",
+  "hint.local_network.title": "macOS Local Network permission may be blocking this connection",
+  "hint.local_network.why": "The machine is on the same local network as this Mac. Since macOS 15, apps need permission to access the local network; without it connections fail immediately.",
+  "hint.local_network.step_allow": "Open System Settings → Privacy & Security → Local Network and turn on Remoter.",
+  "hint.local_network.step_allow_other": "The service was not started by Remoter: in System Settings → Privacy & Security → Local Network, turn on the app that started remoter-mcp (e.g. your terminal).",
+  "hint.local_network.step_missing": "Remoter not in the list? Restart the service and connect again; macOS will ask for permission — click Allow.",
+  "hint.local_network.step_retry": "After allowing, connect or test again.",
+  "hint.local_network.open_settings": "Open Local Network settings",
+  "hint.local_network.restart": "Restart service",
+  "hint.local_network.restarted": "Service restarted, connect again",
 };

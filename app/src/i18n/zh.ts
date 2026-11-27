@@ -269,4 +269,15 @@ export const zh: Record<string, string> = {
   "settings.raw.reload": "重新载入",
   "settings.raw.save": "保存 YAML",
   "settings.raw.saved": "YAML 已保存",
+
+  "hint.local_network.short": "可能缺少 macOS「本地网络」权限",
+  "hint.local_network.title": "连接可能被 macOS「本地网络」权限拦截",
+  "hint.local_network.why": "目标机器和这台 Mac 在同一个局域网。macOS 15 起，程序访问局域网需要单独授权，未授权时连接会直接失败。",
+  "hint.local_network.step_allow": "打开「系统设置 → 隐私与安全性 → 本地网络」，打开 Remoter 的开关。",
+  "hint.local_network.step_allow_other": "服务不是由 Remoter 启动的：在「系统设置 → 隐私与安全性 → 本地网络」中，打开启动 remoter-mcp 的程序（如终端）的开关。",
+  "hint.local_network.step_missing": "列表里没有 Remoter？重启服务后再连接一次，系统会弹出授权请求，点「允许」。",
+  "hint.local_network.step_retry": "授权后重新连接或测试。",
+  "hint.local_network.open_settings": "打开本地网络设置",
+  "hint.local_network.restart": "重启服务",
+  "hint.local_network.restarted": "服务已重启，请重新连接",
 };

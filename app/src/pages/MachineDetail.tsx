@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ErrorHintCallout } from "@/components/ErrorHintCallout";
 import { LiveView, type LiveViewHandle } from "@/components/LiveView";
 import { ControlBadge, StateBadge } from "@/components/StatusDot";
 import { useT } from "@/i18n";
@@ -101,8 +102,10 @@ export default function MachineDetail() {
         <span className="mono text-xs text-muted-foreground">
           {machine.username}@{machine.host}:{machine.port}
         </span>
-        {machine.last_error && machine.state === "failed" && <span className="max-w-md truncate text-xs text-destructive">{machine.last_error}</span>}
+        {machine.last_error && machine.state === "failed" && <span className="max-w-md truncate text-xs text-destructive" title={machine.last_error}>{machine.last_error}</span>}
       </div>
+
+      {machine.state === "failed" && <ErrorHintCallout hint={machine.hint} className="max-w-3xl" />}
 
       <div className="flex flex-wrap items-center gap-2" data-testid="control-bar">
         {connected || transitional ? (

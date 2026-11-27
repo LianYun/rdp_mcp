@@ -58,6 +58,22 @@ type state struct {
 // NoRunDialog makes Win+R do nothing (simulates a locked session) when set in the env.
 const envNoRunDialog = "FAKE_WORKER_NO_RUN_DIALOG"
 
+// dropMode reads FAKE_WORKER_DROP: "takeover", "logoff", "transport" (any other value),
+// or "logoff-once" (logoff on the first connect only; needs FAKE_WORKER_LOG for the marker).
+func dropMode() string {
+	mode := os.Getenv("FAKE_WORKER_DROP")
+	if mode != "logoff-once" {
+		return mode
+	}
+	marker := os.Getenv("FAKE_WORKER_LOG") + ".dropped"
+	f, err := os.OpenFile(marker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "" // already dropped once
+	}
+	f.Close()
+	return "logoff"
+}
+
 func run(sock string) int {
 	c, err := net.Dial("unix", sock)
 	if err != nil {
@@ -146,12 +162,15 @@ func (st *state) handle(req map[string]any) bool {
 		st.dirty = 1
 		st.record(map[string]any{"op": "connect"})
 		st.reply(id, map[string]any{"width": st.w, "height": st.h})
-		if os.Getenv("FAKE_WORKER_DROP") != "" { // server drops the session right after logon
+		if drop := dropMode(); drop != "" { // server drops the session right after logon
 			go func() {
 				time.Sleep(200 * time.Millisecond)
-				if os.Getenv("FAKE_WORKER_DROP") == "takeover" {
+				switch drop {
+				case "takeover":
 					st.send(map[string]any{"event": "disconnected", "code": 0x00010001, "reason": "taken over by another session"})
-				} else {
+				case "logoff":
+					st.send(map[string]any{"event": "disconnected", "code": 0x0001000C, "reason": "user logged off"})
+				default:
 					st.send(map[string]any{"event": "disconnected", "code": 0x0002000D, "reason": "transport failed"})
 				}
 				os.Exit(0)

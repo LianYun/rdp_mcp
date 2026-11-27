@@ -52,6 +52,14 @@ describe("reduceEvent", () => {
     expect(s.machines[0].last_error).toBe("rejected");
   });
 
+  it("carries the failure hint and clears it on the next state change", () => {
+    let s = reduceEvent(initialLive(), { type: "snapshot", data: { machines: [m("a")] } });
+    s = reduceEvent(s, { type: "machine_state", data: { machine: "a", state: "failed", error: "connect failed", hint: "local_network" } });
+    expect(s.machines[0]).toMatchObject({ last_error: "connect failed", hint: "local_network" });
+    s = reduceEvent(s, { type: "machine_state", data: { machine: "a", state: "connecting" } });
+    expect(s.machines[0].hint).toBeUndefined();
+  });
+
   it("updates the control mode", () => {
     let s = reduceEvent(initialLive(), { type: "snapshot", data: { machines: [m("a")] } });
     s = reduceEvent(s, { type: "control_mode", data: { machine: "a", mode: "human" } });

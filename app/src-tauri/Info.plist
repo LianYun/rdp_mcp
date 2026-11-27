@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Tauri 打包时合并进 Remoter.app 的 Info.plist。
+       macOS 15+ 访问同一子网 / 链路本地地址需要“本地网络”权限，系统弹窗会显示这段说明。 -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Remoter connects to the Windows and Mac machines you add (RDP, Screen Sharing, SSH), including machines on your local network.</string>
+</dict>
+</plist>

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { ErrorHintCallout } from "@/components/ErrorHintCallout";
 import { useT } from "@/i18n";
 import { toMachineDef, validateForm, type MachineForm } from "@/lib/machineForm";
 import { useLive } from "@/stores/live";
@@ -233,6 +234,7 @@ export function MachineFormDialog({ initial, editing, onClose, onSaved }: Props)
             <div className={result.ok ? "font-medium text-success" : "font-medium text-destructive"}>
               {result.ok ? t("form.test_ok", { w: result.width ?? 0, h: result.height ?? 0 }) : `${t("form.test_failed")}: ${result.error ?? ""}`}
             </div>
+            {!result.ok && <ErrorHintCallout hint={result.hint} />}
             {result.freerdp && <div className="text-xs text-muted-foreground">FreeRDP {result.freerdp}</div>}
             {result.ssh && (
               <div className={result.ssh === "ok" ? "text-xs text-muted-foreground" : "text-xs text-destructive"} data-testid="test-ssh">
